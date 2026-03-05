@@ -1,24 +1,17 @@
-const OPERATORS = [
-	'[Ops860244]JUNIAR',
-	'[Ops1419799]TAUFIK HIDAYATULLOH',
-	'[Ops437673]Yahya Maulana',
-	'[Ops1525628]ANANDA NICOLA',
-	'[Ops307575]IDUP',
-	'[Ops1419798]AHMAD FUADI',
-	'spx@shopee.com'
-];
-
 let dataset = [];
 let headerRow = [];
 let activeTool = 'mass';
 let selectedOperators = [];
+let availableOperators = [];
+let availableTrips = [];
+let operatorColumnIndex = -1;
+let tripColumnIndex = -1;
 let toastTimer = null;
+let toolSwitchTimer = null;
 
 const COL = {
 	SPX: 2,
-	TO_STATUS: 4,
-	TRIP: 20,
-	OPERATOR: 21
+	TO_STATUS: 4
 };
 
 const fileInput = document.getElementById('fileInput');
@@ -32,6 +25,8 @@ const metaFileSize = document.getElementById('metaFileSize');
 const metaRows = document.getElementById('metaRows');
 const metaTrip = document.getElementById('metaTrip');
 const tripInput = document.getElementById('tripInput');
+const tripCombobox = document.getElementById('tripCombobox');
+const tripDropdown = document.getElementById('tripDropdown');
 const tripHelper = document.getElementById('tripHelper');
 const slotSelect = document.getElementById('slotSelect');
 const reportDateInput = document.getElementById('reportDate');
@@ -45,6 +40,8 @@ const operatorCombobox = document.getElementById('operatorCombobox');
 const operatorDropdown = document.getElementById('operatorDropdown');
 const selectedOperatorTags = document.getElementById('selectedOperatorTags');
 const operatorCountChip = document.getElementById('operatorCountChip');
+const operatorDetectedCount = document.getElementById('operatorDetectedCount');
+const tripDetectedCount = document.getElementById('tripDetectedCount');
 const selectAllOperatorsBtn = document.getElementById('selectAllOperatorsBtn');
 const clearOperatorsBtn = document.getElementById('clearOperatorsBtn');
 const generateMassBtn = document.getElementById('generateMassBtn');
@@ -317,11 +314,51 @@ function initTheme() {
 }
 
 function setActiveTool(tool) {
+	if (tool === activeTool) {
+		refreshPreview();
+		return;
+	}
+
+	if (toolSwitchTimer) {
+		clearTimeout(toolSwitchTimer);
+		toolSwitchTimer = null;
+	}
+
+	const nextPanel = tool === 'mass' ? massUploadPanel : toReportPanel;
+	const currentPanel = activeTool === 'mass' ? massUploadPanel : toReportPanel;
+
 	activeTool = tool;
 	tabMassUpload.classList.toggle('active', tool === 'mass');
 	tabTOReport.classList.toggle('active', tool === 'to');
-	massUploadPanel.classList.toggle('hidden', tool !== 'mass');
-	toReportPanel.classList.toggle('hidden', tool !== 'to');
+
+	if (prefersReducedMotion) {
+		massUploadPanel.classList.toggle('hidden', tool !== 'mass');
+		toReportPanel.classList.toggle('hidden', tool !== 'to');
+		refreshPreview();
+		return;
+	}
+
+	if (currentPanel !== nextPanel && !currentPanel.classList.contains('hidden')) {
+		currentPanel.classList.add('is-hiding');
+		toolSwitchTimer = setTimeout(() => {
+			currentPanel.classList.add('hidden');
+			currentPanel.classList.remove('is-hiding');
+			nextPanel.classList.remove('hidden');
+			nextPanel.classList.add('is-showing');
+			requestAnimationFrame(() => {
+				nextPanel.classList.remove('is-showing');
+			});
+			toolSwitchTimer = null;
+		}, 190);
+	} else {
+		massUploadPanel.classList.toggle('hidden', tool !== 'mass');
+		toReportPanel.classList.toggle('hidden', tool !== 'to');
+		nextPanel.classList.add('is-showing');
+		requestAnimationFrame(() => {
+			nextPanel.classList.remove('is-showing');
+		});
+	}
+
 	refreshPreview();
 }
 
@@ -346,10 +383,17 @@ function formatDateDDMMYYYY(selectedDate) {
 	if (!selectedDate) {
 		return '';
 	}
-	const [year, month, day] = selectedDate.split('-');
-	if (!year || !month || !day) {
+	const normalizedDate = normalize(selectedDate);
+
+	if (/^\d{2}-\d{2}-\d{4}$/.test(normalizedDate)) {
+		return normalizedDate;
+	}
+
+	if (!/^\d{4}-\d{2}-\d{2}$/.test(normalizedDate)) {
 		return '';
 	}
+
+	const [year, month, day] = normalizedDate.split('-');
 	return `${day}-${month}-${year}`;
 }
 
@@ -366,6 +410,215 @@ function updateReportSummary() {
 
 function updateOperatorCounter() {
 	operatorCountChip.textContent = `Operator dipilih: ${selectedOperators.length}`;
+}
+
+function updateOperatorDetectedCounter() {
+	operatorDetectedCount.textContent = `Operators detected: ${availableOperators.length}`;
+}
+
+function updateTripDetectedCounter() {
+	tripDetectedCount.textContent = `Trips detected: ${availableTrips.length}`;
+}
+
+function getColumnIndexByName(columnName) {
+	const normalizedColumnName = normalize(columnName).toLowerCase();
+	return headerRow.findIndex((header) => normalize(header).toLowerCase() === normalizedColumnName);
+}
+
+function getColumnIndexByNames(columnNames) {
+	for (const columnName of columnNames) {
+		const index = getColumnIndexByName(columnName);
+		if (index !== -1) {
+			return index;
+		}
+	}
+	return -1;
+}
+
+function extractUniqueOperatorsFromDataset() {
+	const index = getColumnIndexByNames(['Operator']);
+	if (index === -1) {
+		return { hasOperatorColumn: false, operators: [], columnIndex: -1 };
+	}
+
+	const operators = Array.from(
+		new Set(
+			dataset
+				.map((row) => normalize(row[index]))
+				.filter(Boolean)
+		)
+	);
+
+	return {
+		hasOperatorColumn: true,
+		operators,
+		columnIndex: index
+	};
+}
+
+function extractUniqueTripsFromDataset() {
+	const index = getColumnIndexByNames(['Line Hual Trip Number', 'LineHaul Trip Number']);
+	if (index === -1) {
+		return { hasTripColumn: false, trips: [], columnIndex: -1 };
+	}
+
+	const trips = Array.from(
+		new Set(
+			dataset
+				.map((row) => normalize(row[index]))
+				.filter(Boolean)
+		)
+	);
+
+	return {
+		hasTripColumn: true,
+		trips,
+		columnIndex: index
+	};
+}
+
+function setTripDropdownOptions(trips) {
+	availableTrips = [...trips];
+	renderTripDropdown();
+}
+
+function getMissingRequiredColumns() {
+	const missing = [];
+	if (operatorColumnIndex === -1) {
+		missing.push('Operator');
+	}
+	if (tripColumnIndex === -1) {
+		missing.push('Line Hual Trip Number');
+	}
+	return missing;
+}
+
+function updateRequiredColumnsWarning(showToastMessage = false) {
+	const missingColumns = getMissingRequiredColumns();
+	if (!missingColumns.length) {
+		clearWarning();
+		return;
+	}
+
+	const message = `Missing column in uploaded file: ${missingColumns.join(' / ')}`;
+	setWarning(message);
+	if (showToastMessage) {
+		showWarningToast(message);
+	}
+}
+
+function resetOperatorState() {
+	selectedOperators = [];
+	availableOperators = [];
+	operatorColumnIndex = -1;
+	operatorInput.value = '';
+	updateOperatorCounter();
+	updateOperatorDetectedCounter();
+	renderSelectedOperatorTags();
+	renderOperatorDropdown();
+}
+
+function resetTripState() {
+	availableTrips = [];
+	tripColumnIndex = -1;
+	tripInput.value = '';
+	setTripDropdownOptions([]);
+	tripHelper.textContent = '';
+	updateTripDetectedCounter();
+}
+
+function rebuildOperatorOptionsFromDataset() {
+	const extracted = extractUniqueOperatorsFromDataset();
+	availableOperators = extracted.operators;
+	operatorColumnIndex = extracted.columnIndex;
+
+	updateOperatorDetectedCounter();
+	renderOperatorDropdown();
+}
+
+function rebuildTripOptionsFromDataset() {
+	const extracted = extractUniqueTripsFromDataset();
+	availableTrips = extracted.trips;
+	tripColumnIndex = extracted.columnIndex;
+	setTripDropdownOptions(availableTrips);
+
+	if (availableTrips.length === 1) {
+		tripInput.value = availableTrips[0];
+		tripHelper.textContent = 'Trip detected automatically.';
+	} else {
+		tripInput.value = '';
+		tripHelper.textContent = '';
+	}
+
+	updateTripDetectedCounter();
+	renderTripDropdown();
+}
+
+function renderTripDropdown() {
+	const keyword = normalize(tripInput.value).toLowerCase();
+	const shouldOpen = document.activeElement === tripInput || Boolean(keyword);
+	if (!shouldOpen) {
+		tripDropdown.classList.remove('open');
+		tripDropdown.classList.remove('open-up');
+		return;
+	}
+
+	const filteredTrips = availableTrips.filter((trip) => trip.toLowerCase().includes(keyword));
+	tripDropdown.innerHTML = '';
+
+	if (!filteredTrips.length) {
+		const empty = document.createElement('div');
+		empty.className = 'operator-option-empty';
+		empty.textContent = tripColumnIndex === -1
+			? 'Missing column in uploaded file: Line Hual Trip Number'
+			: 'Trip tidak ditemukan.';
+		tripDropdown.appendChild(empty);
+		positionTripDropdown();
+		tripDropdown.classList.add('open');
+		return;
+	}
+
+	filteredTrips.forEach((trip) => {
+		const option = document.createElement('button');
+		option.type = 'button';
+		option.className = 'operator-option';
+		option.textContent = trip;
+		option.addEventListener('click', () => {
+			tripInput.value = trip;
+			tripDropdown.classList.remove('open');
+			refreshPreview();
+			updateReportSummary();
+			tripInput.focus();
+		});
+		tripDropdown.appendChild(option);
+	});
+
+	positionTripDropdown();
+	tripDropdown.classList.add('open');
+}
+
+function positionTripDropdown() {
+	const viewportMargin = 12;
+	const minPanelHeight = 120;
+	const maxPanelHeight = 240;
+	const comboboxRect = tripCombobox.getBoundingClientRect();
+	const optionCount = Math.max(1, tripDropdown.childElementCount);
+	const estimatedHeight = Math.min(maxPanelHeight, optionCount * 43 + 12);
+
+	const spaceBelow = window.innerHeight - comboboxRect.bottom - viewportMargin;
+	const spaceAbove = comboboxRect.top - viewportMargin;
+	const shouldOpenUp = spaceBelow < estimatedHeight && spaceAbove > spaceBelow;
+
+	tripDropdown.classList.toggle('open-up', shouldOpenUp);
+
+	const availableSpace = shouldOpenUp ? spaceAbove : spaceBelow;
+	const computedMaxHeight = Math.max(minPanelHeight, Math.min(maxPanelHeight, availableSpace));
+	tripDropdown.style.maxHeight = `${computedMaxHeight}px`;
+}
+
+function closeTripDropdown() {
+	tripDropdown.classList.remove('open');
+	tripDropdown.classList.remove('open-up');
 }
 
 function renderSelectedOperatorTags() {
@@ -408,7 +661,7 @@ function renderOperatorDropdown() {
 		return;
 	}
 
-	const filtered = OPERATORS.filter((operator) => {
+	const filtered = availableOperators.filter((operator) => {
 		return operator.toLowerCase().includes(keyword) && !selectedOperators.includes(operator);
 	});
 
@@ -416,7 +669,11 @@ function renderOperatorDropdown() {
 	if (!filtered.length) {
 		const empty = document.createElement('div');
 		empty.className = 'operator-option-empty';
-		empty.textContent = 'Operator tidak ditemukan.';
+		empty.textContent = operatorColumnIndex === -1
+			? 'Missing column in uploaded file: Operator'
+			: availableOperators.length
+				? 'Operator tidak ditemukan.'
+				: 'Belum ada operator terdeteksi dari dataset.';
 		operatorDropdown.appendChild(empty);
 		operatorDropdown.classList.add('open');
 		return;
@@ -449,16 +706,11 @@ function closeOperatorDropdown() {
 function clearSourceFile() {
 	dataset = [];
 	headerRow = [];
-	selectedOperators = [];
-	tripInput.value = '';
-	tripHelper.textContent = '';
-	operatorInput.value = '';
+	resetOperatorState();
+	resetTripState();
 	fileInput.value = '';
 	resetLoadedMeta();
 	setUploaderState('empty');
-	updateOperatorCounter();
-	renderSelectedOperatorTags();
-	renderOperatorDropdown();
 	refreshPreview();
 	clearProgress();
 	resetMessages();
@@ -473,6 +725,8 @@ async function loadFile(file) {
 	resetMessages();
 	clearWarning();
 	clearProgress();
+	resetOperatorState();
+	resetTripState();
 	setUploaderState('loading');
 
 	try {
@@ -484,7 +738,10 @@ async function loadFile(file) {
 
 		headerRow = aoa[0].slice(0, 35);
 		dataset = aoa.slice(1).map((row) => row.slice(0, 35));
-		const detectedTrip = detectTripNumber();
+		rebuildOperatorOptionsFromDataset();
+		rebuildTripOptionsFromDataset();
+		updateRequiredColumnsWarning(true);
+		const detectedTrip = normalize(tripInput.value);
 		updateLoadedMeta(file, dataset.length, detectedTrip);
 		setUploaderState('loaded');
 		refreshPreview();
@@ -493,6 +750,8 @@ async function loadFile(file) {
 	} catch (error) {
 		dataset = [];
 		headerRow = [];
+		resetOperatorState();
+		resetTripState();
 		resetLoadedMeta();
 		setUploaderState('empty');
 		setError(`Gagal membaca file: ${error.message}`);
@@ -515,27 +774,19 @@ async function parseCSV(file) {
 	return XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
 }
 
-function detectTripNumber() {
-	const trips = Array.from(new Set(dataset.map((row) => normalize(row[COL.TRIP])).filter(Boolean)));
-	if (trips.length === 1) {
-		tripInput.value = trips[0];
-		tripHelper.textContent = 'Trip detected automatically.';
-		return trips[0];
-	}
-	tripHelper.textContent = '';
-	return '';
-}
-
 function filterDatasetByTrip(tripNumber) {
+	if (tripColumnIndex === -1) {
+		return [];
+	}
 	const normalizedTrip = normalize(tripNumber);
-	return dataset.filter((row) => normalize(row[COL.TRIP]) === normalizedTrip);
+	return dataset.filter((row) => normalize(row[tripColumnIndex]) === normalizedTrip);
 }
 
 function filterDatasetByOperator(rows, operators) {
-	if (!operators.length) {
+	if (!operators.length || operatorColumnIndex === -1) {
 		return [];
 	}
-	return rows.filter((row) => operators.includes(normalize(row[COL.OPERATOR])));
+	return rows.filter((row) => operators.includes(normalize(row[operatorColumnIndex])));
 }
 
 function createBorderStyle(color = 'D1D5DB') {
@@ -802,10 +1053,24 @@ function validateBeforeGenerate(requireOperator = false) {
 		return null;
 	}
 
+	if (tripColumnIndex === -1) {
+		const message = 'Missing column in uploaded file: Line Hual Trip Number';
+		setWarning(message);
+		showWarningToast(message);
+		return null;
+	}
+
 	const tripRows = filterDatasetByTrip(trip);
 	if (!tripRows.length) {
 		setError('Trip tidak ditemukan di data.');
 		setWarning('Trip tidak ditemukan di data.');
+		return null;
+	}
+
+	if (requireOperator && operatorColumnIndex === -1) {
+		const message = 'Missing column in uploaded file: Operator';
+		setWarning(message);
+		showWarningToast(message);
 		return null;
 	}
 
@@ -943,6 +1208,9 @@ function init() {
 	populateSlots();
 	reportDateInput.value = getTodayInputDate();
 	updateOperatorCounter();
+	updateOperatorDetectedCounter();
+	updateTripDetectedCounter();
+	setTripDropdownOptions([]);
 	renderSelectedOperatorTags();
 	refreshPreview();
 	updateReportSummary();
@@ -971,10 +1239,13 @@ function init() {
 		if (!operatorCombobox.contains(event.target)) {
 			closeOperatorDropdown();
 		}
+		if (!tripCombobox.contains(event.target)) {
+			closeTripDropdown();
+		}
 	});
 
 	selectAllOperatorsBtn.addEventListener('click', () => {
-		selectedOperators = [...OPERATORS];
+		selectedOperators = [...availableOperators];
 		renderSelectedOperatorTags();
 		renderOperatorDropdown();
 		updateOperatorCounter();
@@ -989,10 +1260,37 @@ function init() {
 		refreshPreview();
 	});
 
-	tripInput.addEventListener('input', () => {
+	tripInput.addEventListener('change', () => {
 		refreshPreview();
 		updateReportSummary();
 	});
+	tripInput.addEventListener('input', () => {
+		renderTripDropdown();
+		refreshPreview();
+		updateReportSummary();
+	});
+	tripInput.addEventListener('focus', renderTripDropdown);
+	tripInput.addEventListener('keydown', (event) => {
+		if (event.key === 'Enter') {
+			event.preventDefault();
+			const first = tripDropdown.querySelector('.operator-option');
+			if (first) {
+				first.click();
+			}
+		}
+	});
+
+	window.addEventListener('resize', () => {
+		if (tripDropdown.classList.contains('open')) {
+			positionTripDropdown();
+		}
+	});
+
+	document.addEventListener('scroll', () => {
+		if (tripDropdown.classList.contains('open')) {
+			positionTripDropdown();
+		}
+	}, true);
 
 	slotSelect.addEventListener('change', updateReportSummary);
 	reportDateInput.addEventListener('change', updateReportSummary);

@@ -68,9 +68,13 @@
 		<section class="section global-config">
 			<div class="config-grid">
 				<div class="field">
-					<label for="tripInput">LineHaul Trip Number</label>
-					<input id="tripInput" type="text" placeholder="Contoh: LH-001234" />
+					<label for="tripInput">Line Hual Trip Number</label>
+					<div id="tripCombobox" class="operator-combobox trip-combobox">
+						<input id="tripInput" type="text" placeholder="Ketik/pilih Line Hual Trip Number" autocomplete="off" />
+						<div id="tripDropdown" class="operator-dropdown trip-dropdown"></div>
+					</div>
 					<div id="tripHelper" class="helper-text"></div>
+					<div id="tripDetectedCount" class="helper-text">Trips detected: 0</div>
 				</div>
 				<div class="field">
 					<label for="slotSelect">Slot</label>
@@ -101,6 +105,7 @@
 							<input id="operatorInput" type="text" placeholder="Cari OpsID / Nama lalu klik hasil" autocomplete="off" />
 							<div id="operatorDropdown" class="operator-dropdown"></div>
 						</div>
+						<div id="operatorDetectedCount" class="helper-text">Operators detected: 0</div>
 						<div id="selectedOperatorTags" class="selected-tags"></div>
 					</div>
 					<div class="buttons">
