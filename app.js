@@ -6,8 +6,11 @@ let availableOperators = [];
 let availableTrips = [];
 let operatorColumnIndex = -1;
 let tripColumnIndex = -1;
+let massUploadData = [];
+let massUploadDraftData = [];
 let toastTimer = null;
 let toolSwitchTimer = null;
+const modalCloseTimers = new WeakMap();
 
 const COL = {
 	SPX: 2,
@@ -51,12 +54,22 @@ const generateAllBtn = document.getElementById('generateAllBtn');
 const totalDataEl = document.getElementById('totalData');
 const filteredDataEl = document.getElementById('filteredData');
 const previewBody = document.getElementById('previewBody');
+const viewAllPreviewBtn = document.getElementById('viewAllPreviewBtn');
 const errorMsg = document.getElementById('errorMsg');
 const successMsg = document.getElementById('successMsg');
 const warningMsg = document.getElementById('warningMsg');
 const progressList = document.getElementById('progressList');
 const toast = document.getElementById('toast');
 const themeToggle = document.getElementById('themeToggle');
+const massUploadModal = document.getElementById('massUploadModal');
+const closeMassUploadModalBtn = document.getElementById('closeMassUploadModalBtn');
+const massUploadConfirmOverlay = document.getElementById('massUploadConfirmOverlay');
+const massUploadConfirmCancelBtn = document.getElementById('massUploadConfirmCancelBtn');
+const massUploadConfirmYesBtn = document.getElementById('massUploadConfirmYesBtn');
+const massUploadEditorBody = document.getElementById('massUploadEditorBody');
+const fixMassUploadDimensionsBtn = document.getElementById('fixMassUploadDimensionsBtn');
+const applyMassUploadChangesBtn = document.getElementById('applyMassUploadChangesBtn');
+const cancelMassUploadChangesBtn = document.getElementById('cancelMassUploadChangesBtn');
 const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 function escapeHtml(value) {
@@ -186,6 +199,68 @@ function setWarning(message) {
 
 function clearWarning() {
 	warningMsg.style.display = 'none';
+}
+
+function updateBodyScrollLock() {
+	const hasOpenModal = massUploadModal.classList.contains('open')
+		|| massUploadModal.classList.contains('is-closing')
+		|| massUploadConfirmOverlay.classList.contains('open')
+		|| massUploadConfirmOverlay.classList.contains('is-closing');
+
+	document.body.style.overflow = hasOpenModal ? 'hidden' : '';
+}
+
+function openModalOverlay(overlay) {
+	const activeTimer = modalCloseTimers.get(overlay);
+	if (activeTimer) {
+		clearTimeout(activeTimer);
+		modalCloseTimers.delete(overlay);
+	}
+
+	overlay.classList.remove('is-closing');
+	overlay.classList.add('open');
+	overlay.setAttribute('aria-hidden', 'false');
+	updateBodyScrollLock();
+}
+
+function closeModalOverlay(overlay) {
+	if (!overlay.classList.contains('open') && !overlay.classList.contains('is-closing')) {
+		return;
+	}
+
+	overlay.classList.remove('open');
+	overlay.classList.add('is-closing');
+	overlay.setAttribute('aria-hidden', 'true');
+
+	const activeTimer = modalCloseTimers.get(overlay);
+	if (activeTimer) {
+		clearTimeout(activeTimer);
+	}
+
+	const closeTimer = setTimeout(() => {
+		overlay.classList.remove('is-closing');
+		modalCloseTimers.delete(overlay);
+		updateBodyScrollLock();
+	}, 220);
+
+	modalCloseTimers.set(overlay, closeTimer);
+}
+
+function openMassUploadModal() {
+	openModalOverlay(massUploadModal);
+}
+
+function closeMassUploadModal() {
+	closeModalOverlay(massUploadConfirmOverlay);
+	closeModalOverlay(massUploadModal);
+}
+
+function openMassUploadCloseConfirmation() {
+	openModalOverlay(massUploadConfirmOverlay);
+}
+
+function closeMassUploadCloseConfirmation() {
+	closeModalOverlay(massUploadConfirmOverlay);
 }
 
 function normalize(value) {
@@ -706,6 +781,9 @@ function closeOperatorDropdown() {
 function clearSourceFile() {
 	dataset = [];
 	headerRow = [];
+	massUploadData = [];
+	massUploadDraftData = [];
+	closeMassUploadModal();
 	resetOperatorState();
 	resetTripState();
 	fileInput.value = '';
@@ -750,6 +828,8 @@ async function loadFile(file) {
 	} catch (error) {
 		dataset = [];
 		headerRow = [];
+		massUploadData = [];
+		massUploadDraftData = [];
 		resetOperatorState();
 		resetTripState();
 		resetLoadedMeta();
@@ -787,6 +867,268 @@ function filterDatasetByOperator(rows, operators) {
 		return [];
 	}
 	return rows.filter((row) => operators.includes(normalize(row[operatorColumnIndex])));
+}
+
+function getMassFilteredRows() {
+	const trip = normalize(tripInput.value);
+	if (!trip) {
+		return [];
+	}
+	const tripRows = filterDatasetByTrip(trip);
+	if (!tripRows.length) {
+		return [];
+	}
+	return filterDatasetByOperator(tripRows, selectedOperators);
+}
+
+function syncMassUploadData(rows) {
+	const previousMap = new Map(
+		massUploadData.map((item) => [item.tracking, item])
+	);
+
+	massUploadData = rows
+		.map((row) => normalize(row[COL.SPX]))
+		.filter(Boolean)
+		.map((tracking) => {
+			const previous = previousMap.get(tracking);
+			return {
+				tracking,
+				weight: previous?.weight ?? '',
+				length: previous?.length ?? '',
+				width: previous?.width ?? '',
+				height: previous?.height ?? ''
+			};
+		});
+}
+
+function renderMassUploadEditorTable() {
+	massUploadEditorBody.innerHTML = '';
+	if (!massUploadDraftData.length) {
+		const row = document.createElement('tr');
+		row.innerHTML = '<td colspan="5">Belum ada data.</td>';
+		massUploadEditorBody.appendChild(row);
+		return;
+	}
+
+	massUploadDraftData.forEach((item, index) => {
+		const row = document.createElement('tr');
+		row.innerHTML = `
+			<td><span class="mass-editor-label">${escapeHtml(item.tracking)}</span></td>
+			<td><input type="text" inputmode="decimal" class="mass-editor-input" data-index="${index}" data-col-index="0" data-field="weight" value="${escapeHtml(item.weight)}" /></td>
+			<td><input type="text" inputmode="decimal" class="mass-editor-input" data-index="${index}" data-col-index="1" data-field="length" value="${escapeHtml(item.length)}" /></td>
+			<td><input type="text" inputmode="decimal" class="mass-editor-input" data-index="${index}" data-col-index="2" data-field="width" value="${escapeHtml(item.width)}" /></td>
+			<td><input type="text" inputmode="decimal" class="mass-editor-input" data-index="${index}" data-col-index="3" data-field="height" value="${escapeHtml(item.height)}" /></td>
+		`;
+		massUploadEditorBody.appendChild(row);
+	});
+}
+
+function openMassUploadEditor() {
+	const rows = getMassFilteredRows();
+	if (!rows.length) {
+		setWarning('Tidak ada data filtered untuk diedit.');
+		showWarningToast('Tidak ada data filtered untuk diedit.');
+		return;
+	}
+
+	syncMassUploadData(rows);
+	massUploadDraftData = massUploadData.map((item) => ({ ...item }));
+	renderMassUploadEditorTable();
+	openMassUploadModal();
+}
+
+function focusMassEditorCell(rowIndex, colIndex) {
+	const cell = massUploadEditorBody.querySelector(
+		`.mass-editor-input[data-index="${rowIndex}"][data-col-index="${colIndex}"]`
+	);
+	if (cell) {
+		cell.focus();
+		cell.select();
+	}
+}
+
+function setActiveMassEditorCell(inputElement) {
+	massUploadEditorBody.querySelectorAll('.mass-editor-input.is-active').forEach((cell) => {
+		cell.classList.remove('is-active');
+	});
+	inputElement.classList.add('is-active');
+}
+
+function handleMassEditorKeydown(event) {
+	const target = event.target;
+	if (!(target instanceof HTMLInputElement) || !target.classList.contains('mass-editor-input')) {
+		return;
+	}
+
+	const rowIndex = Number.parseInt(target.dataset.index || '-1', 10);
+	const colIndex = Number.parseInt(target.dataset.colIndex || '-1', 10);
+	if (!Number.isInteger(rowIndex) || !Number.isInteger(colIndex)) {
+		return;
+	}
+
+	if (event.key === 'Enter') {
+		event.preventDefault();
+		const nextRow = Math.min(rowIndex + 1, massUploadDraftData.length - 1);
+		focusMassEditorCell(nextRow, colIndex);
+		return;
+	}
+
+	if (event.key === 'Tab') {
+		event.preventDefault();
+		const direction = event.shiftKey ? -1 : 1;
+		let nextRow = rowIndex;
+		let nextCol = colIndex + direction;
+
+		if (nextCol > 3) {
+			nextCol = 0;
+			nextRow = Math.min(rowIndex + 1, massUploadDraftData.length - 1);
+		}
+
+		if (nextCol < 0) {
+			nextCol = 3;
+			nextRow = Math.max(rowIndex - 1, 0);
+		}
+
+		focusMassEditorCell(nextRow, nextCol);
+	}
+}
+
+function normalizePastedDimensionValue(rawValue) {
+	const cleaned = String(rawValue ?? '').trim();
+	if (cleaned === '') {
+		return null;
+	}
+
+	const numericValue = Number(cleaned);
+	if (Number.isFinite(numericValue)) {
+		return String(numericValue);
+	}
+
+	return cleaned;
+}
+
+function handleMassEditorPaste(event) {
+	const target = event.target;
+	if (!(target instanceof HTMLInputElement) || !target.classList.contains('mass-editor-input')) {
+		return;
+	}
+
+	const startRow = Number.parseInt(target.dataset.index || '-1', 10);
+	const startCol = Number.parseInt(target.dataset.colIndex || '-1', 10);
+	if (!Number.isInteger(startRow) || startRow < 0 || startRow >= massUploadDraftData.length) {
+		return;
+	}
+	if (!Number.isInteger(startCol) || startCol < 0 || startCol > 3) {
+		return;
+	}
+
+	const clipboardText = event.clipboardData?.getData('text/plain') || '';
+	if (!clipboardText.trim()) {
+		return;
+	}
+
+	event.preventDefault();
+
+	const parsedRows = clipboardText
+		.replace(/\r/g, '')
+		.split('\n')
+		.filter((line) => line.length > 0)
+		.map((line) => line.split('\t'));
+
+	if (!parsedRows.length) {
+		return;
+	}
+
+	const dimensionFields = ['weight', 'length', 'width', 'height'];
+	let pastedRowCount = 0;
+
+	for (let rowOffset = 0; rowOffset < parsedRows.length; rowOffset += 1) {
+		const targetRowIndex = startRow + rowOffset;
+		if (targetRowIndex >= massUploadDraftData.length) {
+			break;
+		}
+
+		const sourceCells = parsedRows[rowOffset];
+		let rowUpdated = false;
+
+		for (let sourceColIndex = 0; sourceColIndex < sourceCells.length; sourceColIndex += 1) {
+			const targetColIndex = startCol + sourceColIndex;
+			if (targetColIndex > 3) {
+				break;
+			}
+
+			const normalizedValue = normalizePastedDimensionValue(sourceCells[sourceColIndex]);
+			if (normalizedValue === null) {
+				continue;
+			}
+
+			const field = dimensionFields[targetColIndex];
+			massUploadDraftData[targetRowIndex][field] = normalizedValue;
+			rowUpdated = true;
+		}
+
+		if (rowUpdated) {
+			pastedRowCount += 1;
+		}
+	}
+
+	if (!pastedRowCount) {
+		showWarningToast('Tidak ada data yang berhasil ditempel.');
+		return;
+	}
+
+	renderMassUploadEditorTable();
+	focusMassEditorCell(startRow, startCol);
+	showToast(`${pastedRowCount} rows pasted successfully.`, 'success');
+}
+
+function shuffleDimensions(values) {
+	const shuffled = [...values];
+	for (let index = shuffled.length - 1; index > 0; index -= 1) {
+		const randomIndex = Math.floor(Math.random() * (index + 1));
+		const temp = shuffled[index];
+		shuffled[index] = shuffled[randomIndex];
+		shuffled[randomIndex] = temp;
+	}
+	return shuffled;
+}
+
+function fixMassUploadDimensions() {
+	if (!massUploadDraftData.length) {
+		showWarningToast('Tidak ada data untuk diperbaiki.');
+		return;
+	}
+
+	let repairedCount = 0;
+
+	massUploadDraftData = massUploadDraftData.map((item) => {
+		if (normalize(item.weight).toUpperCase() !== 'FIX_ME') {
+			return item;
+		}
+
+		const [lengthValue, widthValue, heightValue] = shuffleDimensions([20, 25, 25]);
+		repairedCount += 1;
+
+		return {
+			...item,
+			weight: '2.08',
+			length: String(lengthValue),
+			width: String(widthValue),
+			height: String(heightValue)
+		};
+	});
+
+	if (!repairedCount) {
+		showWarningToast('Tidak ada baris FIX_ME yang perlu diperbaiki.');
+		return;
+	}
+
+	renderMassUploadEditorTable();
+	showToast({
+		type: 'warning',
+		title: 'Dimensions repaired',
+		message: `${repairedCount} rows fixed successfully`
+	});
 }
 
 function createBorderStyle(color = 'D1D5DB') {
@@ -967,6 +1309,14 @@ function refreshPreview() {
 	const byTrip = trip ? filterDatasetByTrip(trip) : [];
 	const filteredRows = activeTool === 'mass' ? filterDatasetByOperator(byTrip, selectedOperators) : byTrip;
 
+	if (activeTool === 'mass') {
+		syncMassUploadData(filteredRows);
+	}
+
+	if (viewAllPreviewBtn) {
+		viewAllPreviewBtn.disabled = activeTool !== 'mass' || !filteredRows.length;
+	}
+
 	animateStatValue(totalDataEl, dataset.length);
 	animateStatValue(filteredDataEl, filteredRows.length);
 
@@ -1006,7 +1356,19 @@ function createPivotData(rows) {
 }
 
 function generateMassUploadFile(rows) {
-	const data = rows.map((row) => [normalize(row[COL.SPX]), '', '', '', '']);
+	syncMassUploadData(rows);
+	const massDataMap = new Map(massUploadData.map((item) => [item.tracking, item]));
+	const data = rows.map((row) => {
+		const tracking = normalize(row[COL.SPX]);
+		const edited = massDataMap.get(tracking);
+		return [
+			tracking,
+			edited?.weight ?? '',
+			edited?.length ?? '',
+			edited?.width ?? '',
+			edited?.height ?? ''
+		];
+	});
 	const sheetData = [['SPX Tracking Number', 'Weight(KG)', 'Length(cm)', 'Width(cm)', 'Height(cm)'], ...data];
 	const workbook = XLSX.utils.book_new();
 	const worksheet = XLSX.utils.aoa_to_sheet(sheetData);
@@ -1277,6 +1639,86 @@ function init() {
 			if (first) {
 				first.click();
 			}
+		}
+	});
+
+	viewAllPreviewBtn.addEventListener('click', openMassUploadEditor);
+
+	massUploadEditorBody.addEventListener('input', (event) => {
+		const target = event.target;
+		if (!(target instanceof HTMLInputElement) || !target.classList.contains('mass-editor-input')) {
+			return;
+		}
+
+		const index = Number.parseInt(target.dataset.index || '-1', 10);
+		const field = target.dataset.field;
+		if (!Number.isInteger(index) || index < 0 || index >= massUploadDraftData.length) {
+			return;
+		}
+		if (!['weight', 'length', 'width', 'height'].includes(field)) {
+			return;
+		}
+
+		massUploadDraftData[index][field] = normalize(target.value);
+	});
+
+	massUploadEditorBody.addEventListener('focusin', (event) => {
+		const target = event.target;
+		if (target instanceof HTMLInputElement && target.classList.contains('mass-editor-input')) {
+			setActiveMassEditorCell(target);
+		}
+	});
+
+	massUploadEditorBody.addEventListener('focusout', (event) => {
+		const target = event.target;
+		if (target instanceof HTMLInputElement && target.classList.contains('mass-editor-input')) {
+			target.classList.remove('is-active');
+		}
+	});
+
+	massUploadEditorBody.addEventListener('keydown', handleMassEditorKeydown);
+
+	massUploadEditorBody.addEventListener('paste', handleMassEditorPaste);
+
+	fixMassUploadDimensionsBtn.addEventListener('click', fixMassUploadDimensions);
+
+	applyMassUploadChangesBtn.addEventListener('click', () => {
+		massUploadData = massUploadDraftData.map((item) => ({ ...item }));
+		showToast({
+			type: 'success',
+			title: 'Success',
+			message: 'Changes applied successfully.'
+		});
+		setTimeout(() => {
+			closeMassUploadModal();
+		}, 1000);
+	});
+
+	cancelMassUploadChangesBtn.addEventListener('click', openMassUploadCloseConfirmation);
+	closeMassUploadModalBtn.addEventListener('click', openMassUploadCloseConfirmation);
+	massUploadConfirmCancelBtn.addEventListener('click', closeMassUploadCloseConfirmation);
+	massUploadConfirmYesBtn.addEventListener('click', closeMassUploadModal);
+
+	massUploadModal.addEventListener('click', (event) => {
+		if (event.target === massUploadModal) {
+			openMassUploadCloseConfirmation();
+		}
+	});
+
+	massUploadConfirmOverlay.addEventListener('click', (event) => {
+		if (event.target === massUploadConfirmOverlay) {
+			closeMassUploadCloseConfirmation();
+		}
+	});
+
+	document.addEventListener('keydown', (event) => {
+		if (event.key === 'Escape' && massUploadConfirmOverlay.classList.contains('open')) {
+			closeMassUploadCloseConfirmation();
+			return;
+		}
+
+		if (event.key === 'Escape' && massUploadModal.classList.contains('open')) {
+			closeMassUploadModal();
 		}
 	});
 

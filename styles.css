@@ -1268,6 +1268,25 @@ body.dark-mode .stat-label {
 	background: linear-gradient(180deg, #F8FBFF, #EAF2FF);
 }
 
+.preview-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+	margin-bottom: 6px;
+}
+
+.preview-head label {
+	margin: 0;
+}
+
+.preview-view-all-btn {
+	width: auto;
+	min-width: 84px;
+	padding: 6px 12px;
+	font-size: 12px;
+}
+
 body.dark-mode .preview-wrap {
 	background: linear-gradient(180deg, #111B2A, #0F1826);
 	border-color: #2E3D52;
@@ -1561,6 +1580,286 @@ body.dark-mode .toast-close {
 	border-color: rgba(148, 163, 184, 0.3);
 }
 
+body.modal-open {
+	overflow: hidden;
+}
+
+.modal-overlay {
+	position: fixed;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+	background: rgba(0, 0, 0, 0.35);
+	backdrop-filter: blur(3px);
+	display: none;
+	align-items: center;
+	justify-content: center;
+	padding: 20px;
+	z-index: 9999;
+}
+
+.modal-overlay.open {
+	display: flex;
+	animation: modalOverlayIn 0.22s ease forwards;
+}
+
+.modal-overlay.is-closing {
+	display: flex;
+	animation: modalOverlayOut 0.22s ease forwards;
+}
+
+.modal-card {
+	background: #FFFFFF;
+	border: 1px solid var(--border);
+	border-radius: 16px;
+	padding: 16px;
+	box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+	max-width: 1100px;
+	width: 90%;
+	max-height: 85vh;
+	overflow: hidden;
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}
+
+.modal-overlay.open .modal-card {
+	animation: modalCardIn 0.22s ease forwards;
+}
+
+.modal-overlay.is-closing .modal-card {
+	animation: modalCardOut 0.22s ease forwards;
+}
+
+body.dark-mode .modal-card {
+	background: #111827;
+	border-color: #334155;
+}
+
+.modal-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+	position: sticky;
+	top: 0;
+	background: #FFFFFF;
+	z-index: 2;
+	padding-bottom: 6px;
+}
+
+body.dark-mode .modal-header {
+	background: #111827;
+}
+
+.modal-header h3 {
+	margin: 0;
+	font-size: 18px;
+	font-weight: 800;
+}
+
+.modal-close-btn {
+	width: 32px;
+	height: 32px;
+	min-width: 32px;
+	padding: 0;
+	border-radius: 8px;
+	background: transparent;
+	border: 1px solid var(--border);
+	box-shadow: none;
+}
+
+.mass-editor-table-wrap {
+	border: 1px solid var(--table-border);
+	border-radius: 10px;
+	overflow: auto;
+	max-height: calc(85vh - 165px);
+	background: linear-gradient(180deg, #F8FBFF, #EAF2FF);
+}
+
+body.dark-mode .mass-editor-table-wrap {
+	background: linear-gradient(180deg, #111B2A, #0F1826);
+	border-color: #2E3D52;
+}
+
+.mass-editor-table {
+	width: 100%;
+	border-collapse: collapse;
+}
+
+.mass-editor-table thead th {
+	position: sticky;
+	top: 0;
+	z-index: 1;
+	background: #F1F5F9;
+	font-weight: 600;
+}
+
+body.dark-mode .mass-editor-table thead th {
+	background: #1F2937;
+}
+
+.mass-editor-table tbody tr:nth-child(even) {
+	background: #EAF2FF;
+}
+
+.mass-editor-table tbody tr:hover {
+	background: #DDE9FF;
+}
+
+body.dark-mode .mass-editor-table tbody tr:nth-child(even) {
+	background: #101B2A;
+}
+
+body.dark-mode .mass-editor-table tbody tr:hover {
+	background: #182639;
+}
+
+.mass-editor-table td {
+	vertical-align: middle;
+	padding: 4px 6px;
+}
+
+.mass-editor-table th {
+	padding: 8px 6px;
+}
+
+.mass-editor-input,
+.mass-editor-label {
+	width: 100%;
+	height: 34px;
+	padding: 4px 6px;
+	font-size: 13px;
+	border-radius: 4px;
+	line-height: 24px;
+}
+
+.mass-editor-label {
+	display: inline-flex;
+	align-items: center;
+	background: #F3F4F6;
+	border: 1px solid #D1D5DB;
+	font-weight: 500;
+}
+
+body.dark-mode .mass-editor-label {
+	background: #0F172A;
+	border-color: #334155;
+	color: #D9E2EE;
+}
+
+.mass-editor-input {
+	border: 1px solid #D1D5DB;
+	background: #FFFFFF;
+	text-align: center;
+	box-shadow: none;
+}
+
+body.dark-mode .mass-editor-input {
+	background: #0F172A;
+	border-color: #334155;
+	color: #D9E2EE;
+}
+
+.mass-editor-input:focus,
+.mass-editor-input.is-active {
+	outline: 2px solid #EE4D2D;
+	outline-offset: -1px;
+	border-color: #EE4D2D;
+	box-shadow: none;
+}
+
+.modal-actions {
+	display: flex;
+	justify-content: flex-end;
+	gap: 8px;
+}
+
+.modal-actions button {
+	width: auto;
+	min-width: 150px;
+	border-radius: 10px;
+	padding: 10px 18px;
+	font-weight: 600;
+	transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
+}
+
+.modal-actions button:hover:not(:disabled) {
+	transform: translateY(-1px);
+}
+
+#fixMassUploadDimensionsBtn {
+	background: #FACC15;
+	color: #1F2937;
+	border: none;
+}
+
+#applyMassUploadChangesBtn {
+	background: #22C55E;
+	color: #FFFFFF;
+	border: none;
+}
+
+#cancelMassUploadChangesBtn {
+	background: #EF4444 !important;
+	color: #FFFFFF !important;
+	border: none;
+}
+
+.modal-confirm-overlay {
+	background: rgba(15, 23, 42, 0.62);
+}
+
+.modal-confirm-card {
+	width: min(420px, 100%);
+	max-height: none;
+}
+
+@keyframes modalOverlayIn {
+	from { opacity: 0; }
+	to { opacity: 1; }
+}
+
+@keyframes modalOverlayOut {
+	from { opacity: 1; }
+	to { opacity: 0; }
+}
+
+@keyframes modalCardIn {
+	from {
+		opacity: 0;
+		transform: scale(0.95);
+	}
+	to {
+		opacity: 1;
+		transform: scale(1);
+	}
+}
+
+@keyframes modalCardOut {
+	from {
+		opacity: 1;
+		transform: scale(1);
+	}
+	to {
+		opacity: 0;
+		transform: scale(0.96);
+	}
+}
+
+#massUploadConfirmCancelBtn {
+	background: #E5E7EB;
+	color: #1F2937;
+	border: none;
+}
+
+#massUploadConfirmYesBtn {
+	background: #EF4444 !important;
+	color: #FFFFFF !important;
+	border: none;
+}
+
 @media (max-width: 1080px) {
 	.grid {
 		grid-template-columns: 1fr;
@@ -1575,6 +1874,7 @@ body.dark-mode .toast-close {
 	.config-grid .field:first-child {
 		grid-column: 1 / -1;
 	}
+
 }
 
 @media (max-width: 760px) {
@@ -1598,6 +1898,18 @@ body.dark-mode .toast-close {
 
 	.buttons button,
 	#generateTOBtn {
+		width: 100%;
+	}
+
+	.modal-card {
+		padding: 12px;
+	}
+
+	.modal-actions {
+		flex-direction: column;
+	}
+
+	.modal-actions button {
 		width: 100%;
 	}
 }

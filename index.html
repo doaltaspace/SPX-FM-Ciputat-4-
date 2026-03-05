@@ -140,7 +140,10 @@
 				<div id="warningMsg" class="warning" role="status"></div>
 
 				<div class="field preview-field">
-					<label>Preview Table</label>
+					<div class="preview-head">
+						<label>Preview Table</label>
+						<button id="viewAllPreviewBtn" type="button" class="ghost-btn preview-view-all-btn">View All</button>
+					</div>
 					<div class="preview-wrap">
 						<table>
 							<thead>
@@ -165,6 +168,50 @@
 					</ul>
 				</div>
 			</section>
+		</div>
+	</div>
+
+	<div id="massUploadModal" class="modal-overlay" aria-hidden="true">
+		<div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="massUploadModalTitle">
+			<div class="modal-header">
+				<h3 id="massUploadModalTitle">Mass Upload Editor</h3>
+				<button id="closeMassUploadModalBtn" type="button" class="modal-close-btn" aria-label="Close">✕</button>
+			</div>
+
+			<div class="mass-editor-table-wrap">
+				<table class="mass-editor-table">
+					<thead>
+						<tr>
+							<th>SPX Tracking Number</th>
+							<th>Weight(KG)</th>
+							<th>Length(cm)</th>
+							<th>Width(cm)</th>
+							<th>Height(cm)</th>
+						</tr>
+					</thead>
+					<tbody id="massUploadEditorBody">
+						<tr><td colspan="5">Belum ada data.</td></tr>
+					</tbody>
+				</table>
+			</div>
+
+			<div class="modal-actions">
+				<button id="fixMassUploadDimensionsBtn" type="button" class="ghost-btn">Fix Dimensions</button>
+				<button id="applyMassUploadChangesBtn" type="button">Apply Changes</button>
+				<button id="cancelMassUploadChangesBtn" type="button" class="secondary">Close</button>
+			</div>
+		</div>
+	</div>
+
+	<div id="massUploadConfirmOverlay" class="modal-overlay modal-confirm-overlay" aria-hidden="true">
+		<div class="modal-card modal-confirm-card" role="dialog" aria-modal="true" aria-labelledby="massUploadConfirmTitle">
+			<div class="modal-header">
+				<h3 id="massUploadConfirmTitle">Discard changes?</h3>
+			</div>
+			<div class="modal-actions">
+				<button id="massUploadConfirmCancelBtn" type="button" class="ghost-btn">Cancel</button>
+				<button id="massUploadConfirmYesBtn" type="button" class="secondary">Yes Close</button>
+			</div>
 		</div>
 	</div>
 
