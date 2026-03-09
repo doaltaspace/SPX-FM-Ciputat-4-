@@ -9,8 +9,17 @@ let tripColumnIndex = -1;
 let massUploadData = [];
 let massUploadDraftData = [];
 let toastTimer = null;
+let toastHideTimer = null;
 let toolSwitchTimer = null;
+let notificationAudioContext = null;
+let lastNotificationSoundAt = 0;
+let notificationLogEntries = [];
 const modalCloseTimers = new WeakMap();
+
+// Fill this after deploying Google Apps Script Web App, for full auto draft without Ctrl+V.
+const PREALERT_GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbzNSzGLLp9f5DecJXJ8zfy_UXtdrbr4oV5E84aCfi2KadHtG8ZW5Q9HaQE3sycElEIVOg/exec';
+// Optional: force draft recipient (recommended for team shared mailbox).
+const PREALERT_DRAFT_RECIPIENT = '';
 
 const COL = {
 	SPX: 2,
@@ -47,26 +56,59 @@ const operatorDetectedCount = document.getElementById('operatorDetectedCount');
 const tripDetectedCount = document.getElementById('tripDetectedCount');
 const selectAllOperatorsBtn = document.getElementById('selectAllOperatorsBtn');
 const clearOperatorsBtn = document.getElementById('clearOperatorsBtn');
-const generateMassBtn = document.getElementById('generateMassBtn');
 const copyTrackingBtn = document.getElementById('copyTrackingBtn');
 const generateTOBtn = document.getElementById('generateTOBtn');
 const generateAllBtn = document.getElementById('generateAllBtn');
 const totalDataEl = document.getElementById('totalData');
 const filteredDataEl = document.getElementById('filteredData');
+const previewHeadLeft = document.getElementById('previewHeadLeft');
+const previewHeadRight = document.getElementById('previewHeadRight');
 const previewBody = document.getElementById('previewBody');
+const toStatusSummary = document.getElementById('toStatusSummary');
+const toStatusSummaryBody = document.getElementById('toStatusSummaryBody');
 const viewAllPreviewBtn = document.getElementById('viewAllPreviewBtn');
 const errorMsg = document.getElementById('errorMsg');
 const successMsg = document.getElementById('successMsg');
 const warningMsg = document.getElementById('warningMsg');
 const progressList = document.getElementById('progressList');
 const toast = document.getElementById('toast');
+const notificationLogBtn = document.getElementById('notificationLogBtn');
+const notificationLogCount = document.getElementById('notificationLogCount');
+const notificationLogOverlay = document.getElementById('notificationLogOverlay');
+const notificationLogCloseBtn = document.getElementById('notificationLogCloseBtn');
+const notificationLogClearBtn = document.getElementById('notificationLogClearBtn');
+const notificationLogList = document.getElementById('notificationLogList');
+const notificationLogEmpty = document.getElementById('notificationLogEmpty');
 const themeToggle = document.getElementById('themeToggle');
+const prealertPdfInput = document.getElementById('prealertPdfInput');
+const prealertUploadBox = document.getElementById('prealertUploadBox');
+const prealertUploadInfo = document.getElementById('prealertUploadInfo');
+const prealertUploadStage = document.getElementById('prealertUploadStage');
+const prealertUploadProgressFill = document.getElementById('prealertUploadProgressFill');
+const prealertUploadStateIcon = document.getElementById('prealertUploadStateIcon');
+const prealertUploadStateTitle = document.getElementById('prealertUploadStateTitle');
+const prealertUploadStateDesc = document.getElementById('prealertUploadStateDesc');
+const emailSubjectEl = document.getElementById('emailSubject');
+const emailBodyEl = document.getElementById('emailBody');
+const generateGmailDraftBtn = document.getElementById('generateGmailDraftBtn');
+const downloadPrealertReportBtn = document.getElementById('downloadPrealertReportBtn');
+const driverNameEl = document.getElementById('driverName');
+const plateNumberEl = document.getElementById('plateNumber');
+const destinationEl = document.getElementById('destination');
+const tripNumberEl = document.getElementById('tripNumber');
+const tripTimeEl = document.getElementById('tripTime');
+const ltNumberEl = document.getElementById('ltNumber');
+const hvQtyEl = document.getElementById('hvQty');
+const totalToQtyEl = document.getElementById('totalToQty');
+const liquidationQtyEl = document.getElementById('liquidationQty');
+const orderQtyEl = document.getElementById('orderQty');
 const massUploadModal = document.getElementById('massUploadModal');
 const closeMassUploadModalBtn = document.getElementById('closeMassUploadModalBtn');
 const massUploadConfirmOverlay = document.getElementById('massUploadConfirmOverlay');
 const massUploadConfirmCancelBtn = document.getElementById('massUploadConfirmCancelBtn');
 const massUploadConfirmYesBtn = document.getElementById('massUploadConfirmYesBtn');
 const massUploadEditorBody = document.getElementById('massUploadEditorBody');
+const massUploadStatus = document.getElementById('massUploadStatus');
 const fixMassUploadDimensionsBtn = document.getElementById('fixMassUploadDimensionsBtn');
 const applyMassUploadChangesBtn = document.getElementById('applyMassUploadChangesBtn');
 const cancelMassUploadChangesBtn = document.getElementById('cancelMassUploadChangesBtn');
@@ -81,17 +123,247 @@ function escapeHtml(value) {
 		.replaceAll("'", '&#39;');
 }
 
+function getNotificationAudioContext() {
+	if (notificationAudioContext) {
+		return notificationAudioContext;
+	}
+
+	const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+	if (!AudioContextClass) {
+		return null;
+	}
+
+	notificationAudioContext = new AudioContextClass();
+	return notificationAudioContext;
+}
+
+function playNotificationSound(type) {
+	if (!['success', 'error', 'warning'].includes(type)) {
+		return;
+	}
+
+	const now = Date.now();
+	if (now - lastNotificationSoundAt < 220) {
+		return;
+	}
+
+	const audioContext = getNotificationAudioContext();
+	if (!audioContext) {
+		return;
+	}
+
+	lastNotificationSoundAt = now;
+
+	if (audioContext.state === 'suspended') {
+		audioContext.resume().catch(() => {});
+	}
+
+	const baseTime = audioContext.currentTime;
+	const gainNode = audioContext.createGain();
+	gainNode.connect(audioContext.destination);
+	gainNode.gain.setValueAtTime(0.0001, baseTime);
+
+	if (type === 'success') {
+		const firstOsc = audioContext.createOscillator();
+		const secondOsc = audioContext.createOscillator();
+		firstOsc.type = 'sine';
+		secondOsc.type = 'triangle';
+		firstOsc.frequency.setValueAtTime(740, baseTime);
+		secondOsc.frequency.setValueAtTime(988, baseTime + 0.09);
+
+		firstOsc.connect(gainNode);
+		secondOsc.connect(gainNode);
+
+		gainNode.gain.linearRampToValueAtTime(0.075, baseTime + 0.02);
+		gainNode.gain.linearRampToValueAtTime(0.055, baseTime + 0.1);
+		gainNode.gain.exponentialRampToValueAtTime(0.0001, baseTime + 0.28);
+
+		firstOsc.start(baseTime);
+		firstOsc.stop(baseTime + 0.14);
+		secondOsc.start(baseTime + 0.09);
+		secondOsc.stop(baseTime + 0.28);
+		return;
+	}
+
+	if (type === 'warning') {
+		const warningOscA = audioContext.createOscillator();
+		const warningOscB = audioContext.createOscillator();
+		warningOscA.type = 'square';
+		warningOscB.type = 'square';
+		warningOscA.frequency.setValueAtTime(720, baseTime);
+		warningOscB.frequency.setValueAtTime(720, baseTime + 0.16);
+		warningOscA.connect(gainNode);
+		warningOscB.connect(gainNode);
+
+		gainNode.gain.linearRampToValueAtTime(0.09, baseTime + 0.01);
+		gainNode.gain.exponentialRampToValueAtTime(0.0001, baseTime + 0.12);
+		gainNode.gain.setValueAtTime(0.0001, baseTime + 0.13);
+		gainNode.gain.linearRampToValueAtTime(0.085, baseTime + 0.17);
+		gainNode.gain.exponentialRampToValueAtTime(0.0001, baseTime + 0.3);
+
+		warningOscA.start(baseTime);
+		warningOscA.stop(baseTime + 0.12);
+		warningOscB.start(baseTime + 0.16);
+		warningOscB.stop(baseTime + 0.3);
+		return;
+	}
+
+	const errorOscA = audioContext.createOscillator();
+	const errorOscB = audioContext.createOscillator();
+	errorOscA.type = 'sawtooth';
+	errorOscB.type = 'triangle';
+	errorOscA.frequency.setValueAtTime(320, baseTime);
+	errorOscA.frequency.exponentialRampToValueAtTime(170, baseTime + 0.34);
+	errorOscB.frequency.setValueAtTime(210, baseTime);
+	errorOscB.frequency.exponentialRampToValueAtTime(130, baseTime + 0.34);
+	errorOscA.connect(gainNode);
+	errorOscB.connect(gainNode);
+
+	gainNode.gain.linearRampToValueAtTime(0.11, baseTime + 0.02);
+	gainNode.gain.linearRampToValueAtTime(0.085, baseTime + 0.16);
+	gainNode.gain.exponentialRampToValueAtTime(0.0001, baseTime + 0.36);
+
+	errorOscA.start(baseTime);
+	errorOscB.start(baseTime + 0.02);
+	errorOscA.stop(baseTime + 0.36);
+	errorOscB.stop(baseTime + 0.36);
+}
+
 function hideToast() {
 	if (toastTimer) {
 		clearTimeout(toastTimer);
+		toastTimer = null;
 	}
-	toast.className = 'toast';
-	toast.innerHTML = '';
+
+	if (toastHideTimer) {
+		clearTimeout(toastHideTimer);
+		toastHideTimer = null;
+	}
+
+	if (!toast.classList.contains('show')) {
+		toast.className = 'toast';
+		toast.innerHTML = '';
+		return;
+	}
+
+	toast.classList.remove('show');
+	toast.classList.add('is-hiding');
+
+	toastHideTimer = setTimeout(() => {
+		toast.className = 'toast';
+		toast.innerHTML = '';
+		toastHideTimer = null;
+	}, 320);
+}
+
+function formatNotificationTime(timestamp) {
+	return new Date(timestamp).toLocaleTimeString('id-ID', {
+		hour: '2-digit',
+		minute: '2-digit',
+		second: '2-digit'
+	});
+}
+
+function updateNotificationLogCount() {
+	if (!notificationLogCount) {
+		return;
+	}
+
+	const total = notificationLogEntries.length;
+	notificationLogCount.textContent = total > 99 ? '99+' : String(total);
+	notificationLogCount.classList.toggle('is-hidden', total === 0);
+}
+
+function renderNotificationLog() {
+	if (!notificationLogList || !notificationLogEmpty) {
+		return;
+	}
+
+	if (!notificationLogEntries.length) {
+		notificationLogList.innerHTML = '';
+		notificationLogEmpty.style.display = 'block';
+		updateNotificationLogCount();
+		return;
+	}
+
+	notificationLogEmpty.style.display = 'none';
+	notificationLogList.innerHTML = notificationLogEntries.map((entry) => {
+		const detailsHtml = entry.details.length
+			? `<div class="notification-log-details">${entry.details.map((detail) => `<div>${escapeHtml(detail)}</div>`).join('')}</div>`
+			: '';
+
+		return `
+			<li class="notification-log-item log-${escapeHtml(entry.type)}">
+				<div class="notification-log-meta">
+					<span>${escapeHtml(entry.label)}</span>
+					<time>${formatNotificationTime(entry.timestamp)}</time>
+				</div>
+				<div class="notification-log-title">${escapeHtml(entry.title)}</div>
+				${entry.message ? `<div class="notification-log-message">${escapeHtml(entry.message)}</div>` : ''}
+				${detailsHtml}
+			</li>
+		`;
+	}).join('');
+
+	updateNotificationLogCount();
+}
+
+function addNotificationLogEntry(config) {
+	const type = config.type || 'info';
+	const labels = {
+		success: 'Success',
+		error: 'Error',
+		warning: 'Warning',
+		processing: 'Processing',
+		info: 'Info'
+	};
+
+	notificationLogEntries.unshift({
+		type,
+		label: labels[type] || 'Info',
+		title: config.title || (type === 'error' ? 'Error' : 'Notification'),
+		message: config.message || '',
+		details: Array.isArray(config.details) ? config.details.map((item) => String(item ?? '')) : [],
+		timestamp: Date.now()
+	});
+
+	if (notificationLogEntries.length > 120) {
+		notificationLogEntries = notificationLogEntries.slice(0, 120);
+	}
+
+	renderNotificationLog();
+}
+
+function openNotificationLog() {
+	if (!notificationLogOverlay) {
+		return;
+	}
+
+	openModalOverlay(notificationLogOverlay);
+}
+
+function closeNotificationLog() {
+	if (!notificationLogOverlay) {
+		return;
+	}
+
+	closeModalOverlay(notificationLogOverlay);
+}
+
+function clearNotificationLog() {
+	notificationLogEntries = [];
+	renderNotificationLog();
 }
 
 function showToast(messageOrConfig, type = 'success') {
 	if (toastTimer) {
 		clearTimeout(toastTimer);
+		toastTimer = null;
+	}
+
+	if (toastHideTimer) {
+		clearTimeout(toastHideTimer);
+		toastHideTimer = null;
 	}
 
 	const config = typeof messageOrConfig === 'object' && messageOrConfig !== null
@@ -108,6 +380,13 @@ function showToast(messageOrConfig, type = 'success') {
 		? '<span class="toast-spinner" aria-hidden="true"></span>'
 		: `<span class="toast-icon" aria-hidden="true">${escapeHtml(config.icon || (toastType === 'error' ? '✖' : '✔'))}</span>`;
 
+	addNotificationLogEntry({
+		type: toastType,
+		title,
+		message,
+		details
+	});
+
 	const detailsHtml = details.length
 		? `<ul class="toast-steps">${details.map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul>`
 		: '';
@@ -123,7 +402,10 @@ function showToast(messageOrConfig, type = 'success') {
 		</div>
 	`;
 
-	toast.className = `toast show toast-${toastType}`;
+	toast.className = `toast toast-${toastType}`;
+	void toast.offsetWidth;
+	toast.classList.add('show');
+	playNotificationSound(toastType);
 
 	if (duration > 0) {
 		toastTimer = setTimeout(() => {
@@ -173,39 +455,44 @@ function showWarningToast(message) {
 }
 
 function resetMessages() {
-	errorMsg.style.display = 'none';
-	successMsg.style.display = 'none';
-	warningMsg.style.display = 'none';
+	if (errorMsg) {
+		errorMsg.style.display = 'none';
+	}
+	if (successMsg) {
+		successMsg.style.display = 'none';
+	}
+	if (warningMsg) {
+		warningMsg.style.display = 'none';
+	}
 }
 
 function setError(message) {
-	resetMessages();
-	errorMsg.textContent = message;
-	errorMsg.style.display = 'block';
 	showToast(message, 'error');
 }
 
 function setSuccess(message) {
-	resetMessages();
-	successMsg.textContent = message;
-	successMsg.style.display = 'block';
 	showToast(message, 'success');
 }
 
 function setWarning(message) {
-	warningMsg.textContent = message;
-	warningMsg.style.display = 'block';
+	if (warningMsg) {
+		warningMsg.textContent = message;
+	}
 }
 
 function clearWarning() {
-	warningMsg.style.display = 'none';
+	if (warningMsg) {
+		warningMsg.style.display = 'none';
+	}
 }
 
 function updateBodyScrollLock() {
 	const hasOpenModal = massUploadModal.classList.contains('open')
 		|| massUploadModal.classList.contains('is-closing')
 		|| massUploadConfirmOverlay.classList.contains('open')
-		|| massUploadConfirmOverlay.classList.contains('is-closing');
+		|| massUploadConfirmOverlay.classList.contains('is-closing')
+		|| notificationLogOverlay.classList.contains('open')
+		|| notificationLogOverlay.classList.contains('is-closing');
 
 	document.body.style.overflow = hasOpenModal ? 'hidden' : '';
 }
@@ -248,11 +535,13 @@ function closeModalOverlay(overlay) {
 
 function openMassUploadModal() {
 	openModalOverlay(massUploadModal);
+	setMassUploadStatus('Edit dimensions, then click Apply Changes.', 'info');
 }
 
 function closeMassUploadModal() {
 	closeModalOverlay(massUploadConfirmOverlay);
 	closeModalOverlay(massUploadModal);
+	setMassUploadStatus('Ready to edit dimensions.', 'info');
 }
 
 function openMassUploadCloseConfirmation() {
@@ -377,6 +666,856 @@ function setButtonLoading(button, isLoading, loadingText = 'Processing...') {
 	}
 }
 
+function isPdfFile(file) {
+	if (!file) {
+		return false;
+	}
+	const type = normalize(file.type).toLowerCase();
+	const name = normalize(file.name).toLowerCase();
+	return type === 'application/pdf' || name.endsWith('.pdf');
+}
+
+function setPrealertUploadInfo(message, tone = 'info') {
+	if (!prealertUploadInfo) {
+		return;
+	}
+
+	prealertUploadInfo.textContent = message;
+	prealertUploadInfo.classList.remove('success', 'error');
+	if (tone === 'success' || tone === 'error') {
+		prealertUploadInfo.classList.add(tone);
+	}
+}
+
+function setPrealertUploadState(state = 'idle', progress = 0, stageText = 'Ready', detailText = 'Pilih file untuk mulai parsing.') {
+	if (prealertUploadBox) {
+		prealertUploadBox.dataset.uploadState = state;
+	}
+
+	if (prealertUploadStage) {
+		prealertUploadStage.textContent = stageText;
+		prealertUploadStage.className = 'prealert-upload-stage';
+		if (state === 'uploading') {
+			prealertUploadStage.classList.add('state-uploading');
+		}
+		if (state === 'parsing') {
+			prealertUploadStage.classList.add('state-parsing');
+		}
+		if (state === 'success') {
+			prealertUploadStage.classList.add('state-success');
+		}
+		if (state === 'error') {
+			prealertUploadStage.classList.add('state-error');
+		}
+	}
+
+	if (prealertUploadProgressFill) {
+		const safeProgress = Math.max(0, Math.min(100, Number(progress) || 0));
+		prealertUploadProgressFill.style.width = `${safeProgress}%`;
+		const progressBar = prealertUploadProgressFill.parentElement;
+		if (progressBar) {
+			progressBar.setAttribute('aria-valuenow', String(Math.round(safeProgress)));
+		}
+	}
+
+	if (prealertUploadStateTitle) {
+		prealertUploadStateTitle.textContent = stageText;
+	}
+
+	if (prealertUploadStateDesc) {
+		prealertUploadStateDesc.textContent = detailText;
+	}
+
+	if (prealertUploadStateIcon) {
+		if (state === 'success') {
+			prealertUploadStateIcon.textContent = '✅';
+		} else if (state === 'error') {
+			prealertUploadStateIcon.textContent = '⚠️';
+		} else if (state === 'uploading' || state === 'parsing') {
+			prealertUploadStateIcon.textContent = '⏳';
+		} else {
+			prealertUploadStateIcon.textContent = '📄';
+		}
+	}
+}
+
+function resetPrealertExtractionTable() {
+	const fields = [
+		driverNameEl,
+		plateNumberEl,
+		destinationEl,
+		tripNumberEl,
+		tripTimeEl,
+		ltNumberEl,
+		hvQtyEl,
+		totalToQtyEl,
+		liquidationQtyEl,
+		orderQtyEl
+	];
+
+	fields.forEach((field) => {
+		if (field) {
+			field.textContent = '-';
+		}
+	});
+
+	syncPrealertTripFromReportSlot();
+	updatePrealertEmailPreview();
+}
+
+function getTextValue(element) {
+	return normalize(element?.textContent) || '-';
+}
+
+function getReportSelectionContext() {
+	return {
+		trip: getSlotTripNumber(slotSelect?.value),
+		slot: normalize(slotSelect?.value) || '-',
+		reportDate: getSelectedReportDateFormatted() || '-'
+	};
+}
+
+function getSlotTripNumber(slotValue) {
+	const match = normalize(slotValue).match(/(\d+)/);
+	return match?.[1] || '-';
+}
+
+function syncPrealertTripFromReportSlot() {
+	if (!tripNumberEl) {
+		return;
+	}
+	tripNumberEl.textContent = getSlotTripNumber(slotSelect?.value);
+}
+
+function getIndonesianReportDate() {
+	const rawDate = normalize(reportDateInput?.value);
+	if (!/^\d{4}-\d{2}-\d{2}$/.test(rawDate)) {
+		return '-';
+	}
+
+	const [year, month, day] = rawDate.split('-');
+	const monthNames = [
+		'Januari',
+		'Februari',
+		'Maret',
+		'April',
+		'Mei',
+		'Juni',
+		'Juli',
+		'Agustus',
+		'September',
+		'Oktober',
+		'November',
+		'Desember'
+	];
+
+	const monthIndex = Number.parseInt(month, 10) - 1;
+	const monthLabel = monthNames[monthIndex] || month;
+	return `${day}-${monthLabel}-${year}`;
+}
+
+function buildPrealertSubject() {
+	const { slot } = getReportSelectionContext();
+	const destination = getTextValue(destinationEl);
+	const subjectDestination = destination === '-' ? 'DESTINATION' : destination.toUpperCase();
+	const slotTripNumber = getSlotTripNumber(slot);
+	const formattedDate = getIndonesianReportDate();
+
+	return `PRE ALERT - AMH CIPUTAT 4 FM TO ${subjectDestination} - TRIP ${slotTripNumber} - (${formattedDate})`;
+}
+
+function buildPrealertBody() {
+	const { trip, slot, reportDate } = getReportSelectionContext();
+	const destination = getTextValue(destinationEl);
+	const driver = getTextValue(driverNameEl);
+	const plate = getTextValue(plateNumberEl);
+	const ltNumber = getTextValue(ltNumberEl);
+	const tripTime = getTextValue(tripTimeEl);
+	const hvQty = getTextValue(hvQtyEl);
+	const totalToQty = getTextValue(totalToQtyEl);
+	const liquidationQty = getTextValue(liquidationQtyEl);
+	const orderQty = getTextValue(orderQtyEl);
+
+	const rows = [
+		['Nama Driver', driver],
+		['No Polisi', plate],
+		['Next Destination', destination],
+		['Trip', trip],
+		['Time', tripTime],
+		['LT Number', ltNumber],
+		['HV TO Quantity', hvQty],
+		['Total TO Quantity', totalToQty],
+		['Liquidation TO Quantity', liquidationQty],
+		['Total Order Quantity', orderQty]
+	];
+
+	const htmlRows = rows
+		.map(([label, value]) => `<tr><td>${escapeHtml(label)}</td><td>${escapeHtml(value)}</td></tr>`)
+		.join('');
+
+	const html = `
+		<div class="email-body-wrap">
+			<p>Dear All</p>
+			<p>Berikut Terlampir Surat Jalan From Ciputat 4 AMH To ${escapeHtml(destination)}</p>
+			<table class="email-body-table">
+				<thead>
+					<tr><th colspan="2">CIPUTAT 4 FM</th></tr>
+				</thead>
+				<tbody>
+					${htmlRows}
+				</tbody>
+			</table>
+			<p class="email-footnote">Noted: Jika dalam waktu 3 jam setelah barang sampai tidak ada feedback yang diberikan, maka segala hal yang berkenan dengan paket menjadi tanggungan pihak next station.</p>
+			<p>terima kasih--</p>
+		</div>
+	`;
+
+	const text = [
+		'Dear All',
+		'',
+		`Berikut Terlampir Surat Jalan From Ciputat 4 AMH To ${destination}`,
+		'',
+		'=== CIPUTAT 4 FM ===',
+		...rows.map(([label, value]) => `${label}: ${value}`),
+		'',
+		'Noted: Jika dalam waktu 3 jam setelah barang sampai tidak ada feedback yang diberikan, maka segala hal yang berkenan dengan paket menjadi tanggungan pihak next station.',
+		'',
+		'terima kasih--'
+	].join('\n');
+
+	return {
+		html,
+		text,
+		reportDate,
+		slot
+	};
+}
+
+function updatePrealertEmailPreview() {
+	if (emailSubjectEl) {
+		emailSubjectEl.textContent = buildPrealertSubject();
+	}
+
+	if (emailBodyEl) {
+		emailBodyEl.innerHTML = buildPrealertBody().html;
+	}
+}
+
+function sanitizePrealertRecipient(rawRecipient) {
+	const value = normalize(rawRecipient);
+	if (!value) {
+		return '';
+	}
+
+	if (/^https?:\/\//i.test(value)) {
+		return '';
+	}
+
+	const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+	return isEmail ? value : '';
+}
+
+function openAppsScriptDraftViaFormPost(url, payload) {
+	const form = document.createElement('form');
+	const targetName = `prealert_draft_${Date.now()}`;
+
+	form.method = 'POST';
+	form.action = url;
+	form.target = targetName;
+	form.enctype = 'application/x-www-form-urlencoded';
+	form.style.display = 'none';
+
+	const input = document.createElement('input');
+	input.type = 'hidden';
+	input.name = 'payload';
+	input.value = JSON.stringify(payload);
+	form.appendChild(input);
+
+	document.body.appendChild(form);
+	const popup = window.open('about:blank', targetName);
+	if (!popup) {
+		form.remove();
+		return false;
+	}
+
+	form.submit();
+	form.remove();
+
+	return true;
+}
+
+async function generateGmailDraft() {
+	const subject = buildPrealertSubject();
+	const body = buildPrealertBody();
+	const recipient = sanitizePrealertRecipient(PREALERT_DRAFT_RECIPIENT);
+	const payload = {
+		subject,
+		htmlBody: body.html,
+		textBody: body.text,
+		source: 'Ciputat 4 First Mile Hub',
+		recipient: recipient || undefined
+	};
+
+	if (PREALERT_GAS_WEB_APP_URL) {
+		setButtonLoading(generateGmailDraftBtn, true, 'Creating Draft...');
+		try {
+			const response = await fetch(PREALERT_GAS_WEB_APP_URL, {
+				method: 'POST',
+				headers: {
+					// Apps Script accepts plain text JSON and this avoids many browser preflight issues.
+					'Content-Type': 'text/plain;charset=utf-8'
+				},
+				credentials: 'include',
+				body: JSON.stringify(payload)
+			});
+
+			if (!response.ok) {
+				throw new Error(`HTTP ${response.status}`);
+			}
+
+			const result = await response.json().catch(() => ({}));
+			if (!result.success) {
+				throw new Error(result.message || 'Draft creation failed');
+			}
+
+			window.open('https://mail.google.com/mail/#drafts', '_blank', 'noopener');
+			setSuccess(`Draft Gmail otomatis berhasil dibuat${result.recipient ? ` untuk ${result.recipient}` : ''}. Silakan cek folder Drafts.`);
+			return;
+		} catch (error) {
+			if (/Gmail operation not allowed/i.test(String(error?.message || ''))) {
+				setWarning('Apps Script belum diizinkan akses Gmail. Set deployment ke Execute as: Me, jalankan authorizeGmailScopes(), lalu redeploy.');
+				return;
+			}
+
+			try {
+				const opened = openAppsScriptDraftViaFormPost(PREALERT_GAS_WEB_APP_URL, payload);
+				if (opened) {
+					setWarning('Koneksi langsung ke Apps Script dibatasi browser. Draft dicoba lewat fallback POST tab terpisah, lalu cek folder Drafts Gmail.');
+					return;
+				}
+			} catch (popupError) {
+				// Continue to manual mode fallback below.
+			}
+
+			setWarning(`Auto draft belum aktif (${error.message}). Fallback ke mode manual.`);
+		} finally {
+			setButtonLoading(generateGmailDraftBtn, false);
+		}
+	}
+	const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&su=${encodeURIComponent(subject)}`;
+
+	window.open(gmailUrl, '_blank', 'noopener');
+
+	// Gmail compose URL only supports plain text body, so we copy HTML and ask user to paste.
+	if (navigator.clipboard && window.ClipboardItem) {
+		try {
+			const item = new ClipboardItem({
+				'text/html': new Blob([body.html], { type: 'text/html' }),
+				'text/plain': new Blob([body.text], { type: 'text/plain' })
+			});
+			await navigator.clipboard.write([item]);
+			setSuccess('Gmail draft dibuka. Template tabel sudah di-copy. Paste (Ctrl+V) di body email agar tampil tabel.');
+			return;
+		} catch (error) {
+			// Fallback to plain text clipboard below.
+		}
+	}
+
+	// Legacy clipboard fallback for browsers that block ClipboardItem rich HTML.
+	try {
+		const hidden = document.createElement('div');
+		hidden.innerHTML = body.html;
+		hidden.style.position = 'fixed';
+		hidden.style.left = '-99999px';
+		hidden.style.top = '0';
+		document.body.appendChild(hidden);
+
+		const range = document.createRange();
+		range.selectNodeContents(hidden);
+		const selection = window.getSelection();
+		selection?.removeAllRanges();
+		selection?.addRange(range);
+
+		const copied = document.execCommand('copy');
+		selection?.removeAllRanges();
+		hidden.remove();
+
+		if (copied) {
+			setSuccess('Gmail draft dibuka. Template tabel berhasil di-copy. Paste (Ctrl+V) di body email.');
+			return;
+		}
+	} catch (error) {
+		// Continue to plain text fallback.
+	}
+
+	if (navigator.clipboard) {
+		try {
+			await navigator.clipboard.writeText(body.text);
+			setWarning('Gmail draft dibuka. Browser hanya mengizinkan copy teks, jadi tabel tidak otomatis.');
+			return;
+		} catch (error) {
+			setWarning('Gmail draft dibuka. Silakan copy manual dari Email Preview.');
+		}
+	}
+}
+
+function downloadPrealertReport() {
+	const subject = buildPrealertSubject();
+	const body = buildPrealertBody();
+	const reportHtml = `<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>${escapeHtml(subject)}</title>
+  <style>
+    body { font-family: Arial, sans-serif; color: #111827; padding: 20px; }
+    table { width: 100%; max-width: 520px; border-collapse: collapse; margin-top: 8px; }
+    th, td { border: 1px solid #111827; padding: 6px 8px; font-size: 13px; }
+    th { background: #8dc63f; text-align: center; }
+    td:first-child { width: 46%; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <h3>${escapeHtml(subject)}</h3>
+  ${body.html}
+</body>
+</html>`;
+
+	const blob = new Blob([reportHtml], { type: 'text/html;charset=utf-8' });
+	const url = URL.createObjectURL(blob);
+	const anchor = document.createElement('a');
+	anchor.href = url;
+	anchor.download = `Pre-Alert-${getIndonesianReportDate()}.html`;
+	document.body.appendChild(anchor);
+	anchor.click();
+	anchor.remove();
+	URL.revokeObjectURL(url);
+
+	setSuccess('Report Pre-Alert berhasil diunduh.');
+}
+
+function readMatch(text, patterns) {
+	for (const pattern of patterns) {
+		const match = text.match(pattern);
+		if (match?.[1]) {
+			return normalize(match[1]) || '-';
+		}
+	}
+	return '-';
+}
+
+function extractAfter(label, text, maxLength = 50) {
+	const source = String(text || '');
+	const index = source.indexOf(label);
+
+	if (index === -1) {
+		return '-';
+	}
+
+	const slice = source.substring(index + label.length, index + label.length + maxLength);
+	const value = slice.split(/[\n\r]/)[0].trim();
+
+	return value || '-';
+}
+
+function buildLinesFromTextItems(items) {
+	const prepared = items
+		.map((item) => ({
+			str: normalize(item.str),
+			x: Number(item.transform?.[4] || 0),
+			y: Number(item.transform?.[5] || 0)
+		}))
+		.filter((entry) => entry.str);
+
+	prepared.sort((a, b) => {
+		if (Math.abs(a.y - b.y) > 1.5) {
+			return b.y - a.y;
+		}
+		return a.x - b.x;
+	});
+
+	const groups = [];
+	prepared.forEach((entry) => {
+		const lastGroup = groups[groups.length - 1];
+		if (!lastGroup || Math.abs(lastGroup.y - entry.y) > 2.8) {
+			groups.push({ y: entry.y, items: [entry] });
+			return;
+		}
+		lastGroup.items.push(entry);
+	});
+
+	return groups
+		.map((group) => group.items
+			.sort((a, b) => a.x - b.x)
+			.map((item) => item.str)
+			.join(' ')
+			.replace(/\s+/g, ' ')
+			.trim())
+		.filter(Boolean);
+}
+
+function extractLineValue(lines, labelRegex, options = {}) {
+	const maxLookAhead = options.maxLookAhead ?? 2;
+	const skipRegex = options.skipRegex || /(Surat Jalan|Nama Line Haul Trip|Origin|ATA|STD|STA|Kode Segel|Schedule\/Adhoc|Nama Vendor|Notes|PIC Gudang|#\s+Nomor TO|Jmlh|Berat|TO Type|DG Type)/i;
+
+	for (let index = 0; index < lines.length; index += 1) {
+		const line = lines[index];
+		if (!labelRegex.test(line)) {
+			continue;
+		}
+
+		const inlineMatch = line.match(new RegExp(`${labelRegex.source}\\s*:?\\s*(.+)$`, 'i'));
+		if (inlineMatch?.[1]) {
+			const inlineValue = normalize(inlineMatch[1]);
+			if (inlineValue && !skipRegex.test(inlineValue)) {
+				return inlineValue;
+			}
+		}
+
+		for (let offset = 1; offset <= maxLookAhead; offset += 1) {
+			const nextLine = normalize(lines[index + offset]);
+			if (!nextLine || skipRegex.test(nextLine)) {
+				continue;
+			}
+			return nextLine;
+		}
+	}
+
+	return '-';
+}
+
+function extractQuantitiesFromLines(lines) {
+	const blockText = lines.join('\n');
+	const vendorPattern = /Nama\s*Vendor[\s\S]{0,160}?(\d+)\s+(\d+)\s+(\d+)\s+[\d.,]+\s+(\d+)/gi;
+	let best = null;
+	let match = vendorPattern.exec(blockText);
+
+	while (match) {
+		const totalTo = Number.parseInt(match[1], 10);
+		const hv = Number.parseInt(match[2], 10);
+		const paket = Number.parseInt(match[3], 10);
+		if (!best || totalTo > best.totalTo) {
+			best = { totalTo, hv, paket };
+		}
+		match = vendorPattern.exec(blockText);
+	}
+
+	if (best) {
+		return {
+			hvQty: String(best.hv),
+			totalToQty: String(best.totalTo),
+			orderQty: String(best.paket)
+		};
+	}
+
+	const hvQty = extractLineValue(lines, /Jumlah\s*TO\s*HV/i, { maxLookAhead: 3 }).match(/\d+/)?.[0] || '-';
+	const totalToQty = extractLineValue(lines, /Jumlah\s*TO(?!\s*HV)/i, { maxLookAhead: 3 }).match(/\d+/)?.[0] || '-';
+	const orderQty = extractLineValue(lines, /Jumlah\s*Paket/i, { maxLookAhead: 3 }).match(/\d+/)?.[0] || '-';
+
+	return { hvQty, totalToQty, orderQty };
+}
+
+function extractLineHaulDataFromLines(lines) {
+	const textBlock = lines.join('\n');
+	const compactText = textBlock.replace(/\s+/g, ' ').trim();
+
+	const driverRegexMatch = compactText.match(/Nama\s*Driver\s*:?\s*([A-Za-z\s'.-]{3,}?)(?=\s+Nomor\s*Polisi|\s+Jumlah\s*TO|\s+Schedule\/Adhoc|$)/i);
+	const plateRegexMatch = compactText.match(/Nomor\s*Polisi\s*:?\s*([A-Z]{1,2}\s*\d{1,4}\s*[A-Z]{0,3})/i);
+
+	const rawDriver = driverRegexMatch?.[1] || extractLineValue(lines, /Nama\s*Driver/i, { maxLookAhead: 1 });
+	const cleanedDriver = normalize(rawDriver)
+		.replace(/Nomor\s*Polisi[\s\S]*$/i, '')
+		.replace(/\s{2,}/g, ' ')
+		.trim();
+
+	const plateValue = plateRegexMatch?.[1] || extractLineValue(lines, /Nomor\s*Polisi|No\.?\s*Polisi/i, { maxLookAhead: 2 });
+	const destination = extractLineValue(lines, /\bDestination\b/i, { maxLookAhead: 2 });
+	const timeValue = extractLineValue(lines, /Waktu\s*Segel/i, { maxLookAhead: 2 });
+	const ltMatch = textBlock.match(/LT0[A-Z0-9]+/i);
+	const quantity = extractQuantitiesFromLines(lines);
+
+	return {
+		driver: cleanedDriver || '-',
+		plate: plateValue.match(/[A-Z]{1,2}\s*\d{1,4}\s*[A-Z]{0,3}/i)?.[0] || plateValue || '-',
+		destination: destination || '-',
+		time: timeValue.match(/\d{2}:\d{2}:\d{2}/)?.[0] || '-',
+		ltNumber: ltMatch ? ltMatch[0].toUpperCase() : '-',
+		hvQty: quantity.hvQty || '-',
+		totalToQty: quantity.totalToQty || '-',
+		orderQty: quantity.orderQty || '-'
+	};
+}
+
+function readAllMatches(text, patterns) {
+	const results = [];
+	for (const pattern of patterns) {
+		const flags = pattern.flags.includes('g') ? pattern.flags : `${pattern.flags}g`;
+		const regex = new RegExp(pattern.source, flags);
+		let match = regex.exec(text);
+		while (match) {
+			if (match[1]) {
+				results.push(normalize(match[1]));
+			}
+			match = regex.exec(text);
+		}
+	}
+	return results.filter(Boolean);
+}
+
+function pickLastNonDash(values) {
+	for (let index = values.length - 1; index >= 0; index -= 1) {
+		const value = normalize(values[index]);
+		if (value && value !== '-') {
+			return value;
+		}
+	}
+	return '-';
+}
+
+function pickMaxNumeric(values) {
+	let maxValue = null;
+	values.forEach((value) => {
+		const numeric = Number.parseInt(String(value).replace(/[^0-9]/g, ''), 10);
+		if (Number.isFinite(numeric)) {
+			maxValue = maxValue === null ? numeric : Math.max(maxValue, numeric);
+		}
+	});
+	return maxValue === null ? '-' : String(maxValue);
+}
+
+function extractDataFromText(text) {
+	const compactText = String(text || '').replace(/\s+/g, ' ').trim();
+
+	const driver = pickLastNonDash(readAllMatches(compactText, [
+		/\bNama\s*Driver\s*[:\-]?\s*([A-Za-z.\s'-]{3,})/i,
+		/\bDriver\s*[:\-]?\s*([A-Za-z.\s'-]{3,})/i
+	]));
+
+	const plate = pickLastNonDash(readAllMatches(compactText, [
+		/\bNomor\s*Polisi\s*[:\-]?\s*([A-Z]{1,2}\s*\d{1,4}\s*[A-Z]{0,3})/i,
+		/\bNo\.?\s*Polisi\s*[:\-]?\s*([A-Z0-9\s-]{4,})/i,
+		/\bPlate\s*Number\s*[:\-]?\s*([A-Z0-9\s-]{4,})/i
+	]));
+
+	const destination = pickLastNonDash(readAllMatches(compactText, [
+		/\bNext\s*Destination\s*[:\-]?\s*([A-Za-z0-9.\s\-/]+)/i,
+		/\bDestination\s*[:\-]?\s*([A-Za-z0-9.\s\-/]+)/i
+	]));
+
+	const trip = pickLastNonDash(readAllMatches(compactText, [
+		/\bTrip\s*(?:Number|No\.?|#)?\s*[:\-]?\s*([A-Z0-9\-/]+)/i
+	]));
+
+	const time = pickLastNonDash(readAllMatches(compactText, [
+		/\bWaktu\s*Segel\b[^\d]*(?:\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4})?\s*(\d{1,2}:\d{2}(?::\d{2})?)/i,
+		/\bTime\b\s*[:\-]?\s*(\d{1,2}:\d{2}(?::\d{2})?)/i
+	]));
+
+	const ltNumber = pickLastNonDash(readAllMatches(compactText, [
+		/\b(LT0[A-Z0-9\-/]+)\b/i,
+		/\b(LT[A-Z0-9\-/]{3,})\b/i
+	]));
+
+	let hvQty = pickMaxNumeric(readAllMatches(compactText, [
+		/\bJumlah\s*TO\s*HV\s*[:\-]?\s*(\d+)\b/i,
+		/\bTO\s*HV\s*[:\-]?\s*(\d+)\b/i
+	]));
+
+	let totalToQty = pickMaxNumeric(readAllMatches(compactText, [
+		/\bJumlah\s*TO\b(?!\s*HV)\s*[:\-]?\s*(\d+)\b/i,
+		/\bTotal\s*TO\s*[:\-]?\s*(\d+)\b/i
+	]));
+
+	let orderQty = pickMaxNumeric(readAllMatches(compactText, [
+		/\bJumlah\s*Paket\s*[:\-]?\s*(\d+)\b/i,
+		/\bTotal\s*(?:Order|Paket)\s*(?:Quantity)?\s*[:\-]?\s*(\d+)\b/i
+	]));
+
+	const liquidationQty = pickMaxNumeric(readAllMatches(compactText, [
+		/\bLiquidation\s*(?:TO\s*Quantity)?\s*[:\-]?\s*(\d+)\b/i,
+		/\bTO\s*Type\b[^\n\r]*?\bLiquidation\b[^\d]*(\d+)\b/i
+	]));
+
+	const vendorSummary = compactText.match(/Nama\s*Vendor[\s\S]{0,120}?([0-9]+)\s+([0-9]+)\s+([0-9]+)\s+[0-9.,]+\s+([0-9]+)/i);
+	if (vendorSummary) {
+		totalToQty = String(Number.parseInt(vendorSummary[1], 10));
+		hvQty = String(Number.parseInt(vendorSummary[2], 10));
+		orderQty = String(Number.parseInt(vendorSummary[3], 10));
+	}
+
+	return {
+		driver,
+		plate,
+		destination,
+		trip,
+		time,
+		ltNumber,
+		hvQty,
+		totalToQty,
+		liquidationQty,
+		orderQty
+	};
+}
+
+function applyExtractedData(data) {
+	if (!data) {
+		return;
+	}
+
+	if (driverNameEl) driverNameEl.textContent = data.driver;
+	if (plateNumberEl) plateNumberEl.textContent = data.plate;
+	if (destinationEl) destinationEl.textContent = data.destination;
+	if (tripNumberEl) tripNumberEl.textContent = data.trip;
+	if (tripTimeEl) tripTimeEl.textContent = data.time;
+	if (ltNumberEl) ltNumberEl.textContent = data.ltNumber;
+	if (hvQtyEl) hvQtyEl.textContent = data.hvQty;
+	if (totalToQtyEl) totalToQtyEl.textContent = data.totalToQty;
+	if (liquidationQtyEl) liquidationQtyEl.textContent = data.liquidationQty;
+	if (orderQtyEl) orderQtyEl.textContent = data.orderQty;
+
+	updatePrealertEmailPreview();
+}
+
+async function parsePDF(file, onProgress) {
+	if (typeof pdfjsLib === 'undefined' || !pdfjsLib?.getDocument) {
+		throw new Error('PDF.js belum tersedia.');
+	}
+
+	if (pdfjsLib.GlobalWorkerOptions) {
+		pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+	}
+
+	const buffer = await file.arrayBuffer();
+	const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+	const pages = [];
+	const debugLines = [];
+	if (typeof onProgress === 'function') {
+		onProgress(20, `Membaca ${pdf.numPages} halaman PDF...`);
+	}
+
+	for (let pageIndex = 1; pageIndex <= pdf.numPages; pageIndex += 1) {
+		const page = await pdf.getPage(pageIndex);
+		const textContent = await page.getTextContent();
+		const lines = buildLinesFromTextItems(textContent.items);
+		pages.push(lines);
+		debugLines.push(`--- PAGE ${pageIndex} ---`);
+		lines.slice(0, 30).forEach((line) => debugLines.push(line));
+
+		if (typeof onProgress === 'function') {
+			const currentProgress = 20 + (pageIndex / Math.max(1, pdf.numPages)) * 55;
+			onProgress(currentProgress, `Parsing halaman ${pageIndex}/${pdf.numPages}...`);
+		}
+	}
+
+ 	const pdfText = pages.flat().join(' ');
+	console.log('PDF LINES:', debugLines.join('\n'));
+
+	console.log('PDF TEXT:', pdfText);
+	let extracted = null;
+	let bestScore = -1;
+
+	pages.forEach((lines) => {
+		const candidate = extractLineHaulDataFromLines(lines);
+		const scoreParts = [
+			candidate.driver !== '-' ? 1 : 0,
+			candidate.plate !== '-' ? 1 : 0,
+			candidate.destination !== '-' ? 1 : 0,
+			candidate.time !== '-' ? 1 : 0,
+			Number.parseInt(candidate.totalToQty, 10) || 0,
+			Number.parseInt(candidate.orderQty, 10) || 0,
+			Number.parseInt(candidate.hvQty, 10) || 0
+		];
+		const score = scoreParts.reduce((sum, value) => sum + value, 0);
+		if (score > bestScore) {
+			bestScore = score;
+			extracted = candidate;
+		}
+	});
+
+	if (!extracted) {
+		extracted = extractLineHaulDataFromLines(pages.flat());
+	}
+
+	if (typeof onProgress === 'function') {
+		onProgress(90, 'Mengisi data extraction ke tabel...');
+	}
+
+	applyExtractedData({
+		driver: extracted.driver || '-',
+		plate: extracted.plate || '-',
+		destination: extracted.destination || '-',
+		trip: getSlotTripNumber(slotSelect?.value),
+		time: extracted.time || '-',
+		ltNumber: extracted.ltNumber || '-',
+		hvQty: extracted.hvQty || '-',
+		totalToQty: extracted.totalToQty || '-',
+		liquidationQty: '-',
+		orderQty: extracted.orderQty || '-'
+	});
+
+	if (typeof onProgress === 'function') {
+		onProgress(100, 'Selesai memproses PDF.');
+	}
+}
+
+async function handlePrealertPdfUpload(file) {
+	if (!file) {
+		setPrealertUploadInfo('Belum ada file PDF dipilih.', 'info');
+		setPrealertUploadState('idle', 0, 'Ready', 'Pilih file untuk mulai parsing.');
+		resetPrealertExtractionTable();
+		return;
+	}
+
+	if (!isPdfFile(file)) {
+		if (prealertPdfInput) {
+			prealertPdfInput.value = '';
+		}
+		setPrealertUploadInfo('File harus berformat PDF (.pdf).', 'error');
+		setPrealertUploadState('error', 0, 'Invalid File', 'Gunakan file PDF (.pdf).');
+		showWarningToast('File harus berformat PDF (.pdf).');
+		resetPrealertExtractionTable();
+		return;
+	}
+
+	setPrealertUploadState('uploading', 10, 'Uploading', `File terdeteksi: ${file.name}`);
+	setPrealertUploadInfo(`Membaca PDF: ${file.name}`, 'info');
+
+	try {
+		console.log('PDF uploaded:', file.name);
+		setPrealertUploadState('parsing', 18, 'Parsing', `Memproses ${file.name}`);
+		await parsePDF(file, (progress, message) => {
+			setPrealertUploadState('parsing', progress, 'Parsing', message);
+			setPrealertUploadInfo(`${message} (${Math.round(progress)}%)`, 'info');
+		});
+		setPrealertUploadState('success', 100, 'Done', `${file.name} selesai diproses.`);
+		setPrealertUploadInfo(`File ter-upload: ${file.name}`, 'success');
+		setSuccess('PDF berhasil diproses dan data berhasil diekstrak');
+	} catch (error) {
+		resetPrealertExtractionTable();
+		setPrealertUploadState('error', 100, 'Failed', `Gagal memproses ${file.name}`);
+		setPrealertUploadInfo(`Gagal memproses PDF: ${error.message}`, 'error');
+		setError(`Gagal memproses PDF: ${error.message}`);
+	}
+}
+
+function setMassUploadStatus(message, tone = 'info') {
+	if (!massUploadStatus) {
+		return;
+	}
+
+	massUploadStatus.textContent = message;
+	massUploadStatus.className = 'peek-status';
+
+	if (tone === 'processing') {
+		massUploadStatus.classList.add('status-processing');
+	} else if (tone === 'success') {
+		massUploadStatus.classList.add('status-success');
+	} else if (tone === 'warning') {
+		massUploadStatus.classList.add('status-warning');
+	}
+}
+
 function applyTheme(theme) {
 	const isDark = theme === 'dark';
 	document.body.classList.toggle('dark-mode', isDark);
@@ -389,50 +1528,9 @@ function initTheme() {
 }
 
 function setActiveTool(tool) {
-	if (tool === activeTool) {
-		refreshPreview();
-		return;
-	}
-
-	if (toolSwitchTimer) {
-		clearTimeout(toolSwitchTimer);
-		toolSwitchTimer = null;
-	}
-
-	const nextPanel = tool === 'mass' ? massUploadPanel : toReportPanel;
-	const currentPanel = activeTool === 'mass' ? massUploadPanel : toReportPanel;
-
 	activeTool = tool;
-	tabMassUpload.classList.toggle('active', tool === 'mass');
-	tabTOReport.classList.toggle('active', tool === 'to');
-
-	if (prefersReducedMotion) {
-		massUploadPanel.classList.toggle('hidden', tool !== 'mass');
-		toReportPanel.classList.toggle('hidden', tool !== 'to');
-		refreshPreview();
-		return;
-	}
-
-	if (currentPanel !== nextPanel && !currentPanel.classList.contains('hidden')) {
-		currentPanel.classList.add('is-hiding');
-		toolSwitchTimer = setTimeout(() => {
-			currentPanel.classList.add('hidden');
-			currentPanel.classList.remove('is-hiding');
-			nextPanel.classList.remove('hidden');
-			nextPanel.classList.add('is-showing');
-			requestAnimationFrame(() => {
-				nextPanel.classList.remove('is-showing');
-			});
-			toolSwitchTimer = null;
-		}, 190);
-	} else {
-		massUploadPanel.classList.toggle('hidden', tool !== 'mass');
-		toReportPanel.classList.toggle('hidden', tool !== 'to');
-		nextPanel.classList.add('is-showing');
-		requestAnimationFrame(() => {
-			nextPanel.classList.remove('is-showing');
-		});
-	}
+	tabMassUpload?.classList.toggle('active', tool === 'mass');
+	tabTOReport?.classList.toggle('active', tool === 'to');
 
 	refreshPreview();
 }
@@ -481,6 +1579,8 @@ function updateReportSummary() {
 	const slot = slotSelect.value || '-';
 	const reportDate = getSelectedReportDateFormatted() || '-';
 	reportSummary.textContent = `Trip: ${trip} | Slot: ${slot} | Report Date: ${reportDate}`;
+	syncPrealertTripFromReportSlot();
+	updatePrealertEmailPreview();
 }
 
 function updateOperatorCounter() {
@@ -824,7 +1924,6 @@ async function loadFile(file) {
 		setUploaderState('loaded');
 		refreshPreview();
 		setSuccess('Source file loaded successfully.');
-		showToast('Source file loaded successfully.', 'success');
 	} catch (error) {
 		dataset = [];
 		headerRow = [];
@@ -904,22 +2003,24 @@ function syncMassUploadData(rows) {
 function renderMassUploadEditorTable() {
 	massUploadEditorBody.innerHTML = '';
 	if (!massUploadDraftData.length) {
-		const row = document.createElement('tr');
-		row.innerHTML = '<td colspan="5">Belum ada data.</td>';
-		massUploadEditorBody.appendChild(row);
+		const emptyRow = document.createElement('div');
+		emptyRow.className = 'editor-empty-row';
+		emptyRow.textContent = 'Belum ada data.';
+		massUploadEditorBody.appendChild(emptyRow);
 		return;
 	}
 
 	massUploadDraftData.forEach((item, index) => {
-		const row = document.createElement('tr');
-		row.innerHTML = `
-			<td><span class="mass-editor-label">${escapeHtml(item.tracking)}</span></td>
-			<td><input type="text" inputmode="decimal" class="mass-editor-input" data-index="${index}" data-col-index="0" data-field="weight" value="${escapeHtml(item.weight)}" /></td>
-			<td><input type="text" inputmode="decimal" class="mass-editor-input" data-index="${index}" data-col-index="1" data-field="length" value="${escapeHtml(item.length)}" /></td>
-			<td><input type="text" inputmode="decimal" class="mass-editor-input" data-index="${index}" data-col-index="2" data-field="width" value="${escapeHtml(item.width)}" /></td>
-			<td><input type="text" inputmode="decimal" class="mass-editor-input" data-index="${index}" data-col-index="3" data-field="height" value="${escapeHtml(item.height)}" /></td>
-		`;
-		massUploadEditorBody.appendChild(row);
+		const cells = [
+			`<div class="editor-cell"><span class="mass-editor-label">${escapeHtml(item.tracking)}</span></div>`,
+			`<div class="editor-cell"><input type="text" inputmode="decimal" class="mass-editor-input" data-index="${index}" data-col-index="0" data-field="weight" value="${escapeHtml(item.weight)}" /></div>`,
+			`<div class="editor-cell"><input type="text" inputmode="decimal" class="mass-editor-input" data-index="${index}" data-col-index="1" data-field="length" value="${escapeHtml(item.length)}" /></div>`,
+			`<div class="editor-cell"><input type="text" inputmode="decimal" class="mass-editor-input" data-index="${index}" data-col-index="2" data-field="width" value="${escapeHtml(item.width)}" /></div>`,
+			`<div class="editor-cell"><input type="text" inputmode="decimal" class="mass-editor-input" data-index="${index}" data-col-index="3" data-field="height" value="${escapeHtml(item.height)}" /></div>`
+		];
+
+		const rowFragment = document.createRange().createContextualFragment(cells.join(''));
+		massUploadEditorBody.appendChild(rowFragment);
 	});
 }
 
@@ -1096,7 +2197,7 @@ function shuffleDimensions(values) {
 function fixMassUploadDimensions() {
 	if (!massUploadDraftData.length) {
 		showWarningToast('Tidak ada data untuk diperbaiki.');
-		return;
+		return 0;
 	}
 
 	let repairedCount = 0;
@@ -1120,7 +2221,7 @@ function fixMassUploadDimensions() {
 
 	if (!repairedCount) {
 		showWarningToast('Tidak ada baris FIX_ME yang perlu diperbaiki.');
-		return;
+		return 0;
 	}
 
 	renderMassUploadEditorTable();
@@ -1129,6 +2230,8 @@ function fixMassUploadDimensions() {
 		title: 'Dimensions repaired',
 		message: `${repairedCount} rows fixed successfully`
 	});
+
+	return repairedCount;
 }
 
 function createBorderStyle(color = 'D1D5DB') {
@@ -1305,20 +2408,51 @@ function formatPivotWorksheet(worksheet, pivotRows) {
 
 function refreshPreview() {
 	previewBody.innerHTML = '';
+	if (toStatusSummaryBody) {
+		toStatusSummaryBody.innerHTML = '';
+	}
 	const trip = normalize(tripInput.value);
 	const byTrip = trip ? filterDatasetByTrip(trip) : [];
-	const filteredRows = activeTool === 'mass' ? filterDatasetByOperator(byTrip, selectedOperators) : byTrip;
+	const filteredRows = filterDatasetByOperator(byTrip, selectedOperators);
 
-	if (activeTool === 'mass') {
-		syncMassUploadData(filteredRows);
+	if (toStatusSummary) {
+		toStatusSummary.classList.remove('hidden');
 	}
+
+	if (previewHeadLeft && previewHeadRight) {
+		previewHeadLeft.textContent = 'No';
+		previewHeadLeft.style.width = '70px';
+		previewHeadRight.textContent = 'SPX Tracking Number';
+	}
+
+	syncMassUploadData(filteredRows);
 
 	if (viewAllPreviewBtn) {
-		viewAllPreviewBtn.disabled = activeTool !== 'mass' || !filteredRows.length;
+		viewAllPreviewBtn.disabled = !filteredRows.length;
 	}
 
-	animateStatValue(totalDataEl, dataset.length);
+	animateStatValue(totalDataEl, byTrip.length);
 	animateStatValue(filteredDataEl, filteredRows.length);
+
+	const statusMap = new Map();
+	byTrip.forEach((rowData) => {
+		const status = normalize(rowData[COL.TO_STATUS]) || 'Unknown';
+		statusMap.set(status, (statusMap.get(status) || 0) + 1);
+	});
+
+	if (!statusMap.size) {
+		const emptyStatusRow = document.createElement('tr');
+		emptyStatusRow.innerHTML = '<td colspan="2">Belum ada data.</td>';
+		toStatusSummaryBody?.appendChild(emptyStatusRow);
+	} else {
+		Array.from(statusMap.entries())
+			.sort((a, b) => b[1] - a[1])
+			.forEach(([status, count]) => {
+				const row = document.createElement('tr');
+				row.innerHTML = `<td>${escapeHtml(status)}</td><td>${count}</td>`;
+				toStatusSummaryBody?.appendChild(row);
+			});
+	}
 
 	if (!filteredRows.length) {
 		const row = document.createElement('tr');
@@ -1329,7 +2463,7 @@ function refreshPreview() {
 
 	filteredRows.forEach((rowData, index) => {
 		const row = document.createElement('tr');
-		row.innerHTML = `<td>${index + 1}</td><td>${normalize(rowData[COL.SPX])}</td>`;
+		row.innerHTML = `<td>${index + 1}</td><td>${escapeHtml(normalize(rowData[COL.SPX]))}</td>`;
 		previewBody.appendChild(row);
 	});
 }
@@ -1513,13 +2647,6 @@ function bindKeyboardShortcuts() {
 			return;
 		}
 
-		if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'm') {
-			event.preventDefault();
-			setActiveTool('mass');
-			generateMassBtn.click();
-			return;
-		}
-
 		if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 't') {
 			event.preventDefault();
 			setActiveTool('to');
@@ -1581,6 +2708,76 @@ function init() {
 	setUploaderState('empty');
 	resetLoadedMeta();
 	initTheme();
+	renderNotificationLog();
+	setPrealertUploadInfo('Belum ada file PDF dipilih.', 'info');
+	setPrealertUploadState('idle', 0, 'Ready', 'Pilih file untuk mulai parsing.');
+	syncPrealertTripFromReportSlot();
+	updatePrealertEmailPreview();
+
+	document.querySelectorAll('.tab').forEach((tab) => {
+		tab.addEventListener('click', () => {
+			document.querySelectorAll('.tab').forEach((t) => t.classList.remove('active'));
+			tab.classList.add('active');
+
+			const target = tab.dataset.tab;
+
+			document.querySelectorAll('.page').forEach((p) => p.classList.remove('active'));
+
+			if (target === 'report') {
+				document.getElementById('reportPage')?.classList.add('active');
+			}
+
+			if (target === 'prealert') {
+				document.getElementById('prealertPage')?.classList.add('active');
+			}
+		});
+	});
+
+	if (prealertPdfInput) {
+		prealertPdfInput.addEventListener('change', async (event) => {
+			const file = event.target.files?.[0];
+			if (!file) {
+				return;
+			}
+			await handlePrealertPdfUpload(file);
+		});
+	}
+
+	if (prealertUploadBox) {
+		prealertUploadBox.addEventListener('dragover', (event) => {
+			event.preventDefault();
+			prealertUploadBox.classList.add('dragover');
+		});
+
+		prealertUploadBox.addEventListener('dragleave', () => {
+			prealertUploadBox.classList.remove('dragover');
+		});
+
+		prealertUploadBox.addEventListener('drop', async (event) => {
+			event.preventDefault();
+			prealertUploadBox.classList.remove('dragover');
+			const file = event.dataTransfer?.files?.[0];
+			if (!file) {
+				return;
+			}
+
+			if (prealertPdfInput && typeof DataTransfer !== 'undefined') {
+				const dataTransfer = new DataTransfer();
+				dataTransfer.items.add(file);
+				prealertPdfInput.files = dataTransfer.files;
+			}
+
+			await handlePrealertPdfUpload(file);
+		});
+	}
+
+	generateGmailDraftBtn?.addEventListener('click', () => {
+		generateGmailDraft();
+	});
+
+	downloadPrealertReportBtn?.addEventListener('click', () => {
+		downloadPrealertReport();
+	});
 
 	tabMassUpload.addEventListener('click', () => setActiveTool('mass'));
 	tabTOReport.addEventListener('click', () => setActiveTool('to'));
@@ -1660,6 +2857,7 @@ function init() {
 		}
 
 		massUploadDraftData[index][field] = normalize(target.value);
+		setMassUploadStatus('Unsaved changes. Click Apply Changes to save.', 'warning');
 	});
 
 	massUploadEditorBody.addEventListener('focusin', (event) => {
@@ -1680,28 +2878,40 @@ function init() {
 
 	massUploadEditorBody.addEventListener('paste', handleMassEditorPaste);
 
-	fixMassUploadDimensionsBtn.addEventListener('click', fixMassUploadDimensions);
+	fixMassUploadDimensionsBtn.addEventListener('click', () => {
+		setMassUploadStatus('Fixing dimensions...', 'processing');
+		const repairedCount = fixMassUploadDimensions();
+		if (repairedCount > 0) {
+			setMassUploadStatus(`${repairedCount} rows fixed. Review and apply changes.`, 'success');
+			return;
+		}
+		setMassUploadStatus('No FIX_ME rows detected to fix.', 'warning');
+	});
 
 	applyMassUploadChangesBtn.addEventListener('click', () => {
+		setMassUploadStatus('Applying changes...', 'processing');
+		setButtonLoading(applyMassUploadChangesBtn, true, 'Applying...');
 		massUploadData = massUploadDraftData.map((item) => ({ ...item }));
 		showToast({
 			type: 'success',
 			title: 'Success',
 			message: 'Changes applied successfully.'
 		});
+		setMassUploadStatus('Changes applied successfully.', 'success');
 		setTimeout(() => {
+			setButtonLoading(applyMassUploadChangesBtn, false);
 			closeMassUploadModal();
 		}, 1000);
 	});
 
-	cancelMassUploadChangesBtn.addEventListener('click', openMassUploadCloseConfirmation);
-	closeMassUploadModalBtn.addEventListener('click', openMassUploadCloseConfirmation);
+	cancelMassUploadChangesBtn?.addEventListener('click', closeMassUploadModal);
+	closeMassUploadModalBtn.addEventListener('click', closeMassUploadModal);
 	massUploadConfirmCancelBtn.addEventListener('click', closeMassUploadCloseConfirmation);
 	massUploadConfirmYesBtn.addEventListener('click', closeMassUploadModal);
 
 	massUploadModal.addEventListener('click', (event) => {
 		if (event.target === massUploadModal) {
-			openMassUploadCloseConfirmation();
+			closeMassUploadModal();
 		}
 	});
 
@@ -1711,7 +2921,18 @@ function init() {
 		}
 	});
 
+	notificationLogOverlay.addEventListener('click', (event) => {
+		if (event.target === notificationLogOverlay) {
+			closeNotificationLog();
+		}
+	});
+
 	document.addEventListener('keydown', (event) => {
+		if (event.key === 'Escape' && notificationLogOverlay.classList.contains('open')) {
+			closeNotificationLog();
+			return;
+		}
+
 		if (event.key === 'Escape' && massUploadConfirmOverlay.classList.contains('open')) {
 			closeMassUploadCloseConfirmation();
 			return;
@@ -1736,35 +2957,6 @@ function init() {
 
 	slotSelect.addEventListener('change', updateReportSummary);
 	reportDateInput.addEventListener('change', updateReportSummary);
-
-	generateMassBtn.addEventListener('click', () => {
-		resetMessages();
-		clearWarning();
-		setButtonLoading(generateMassBtn, true, 'Generating Excel...');
-		showProcessingToast([
-			'Filtering dataset',
-			'Generating Mass Upload file'
-		]);
-		try {
-			const tripRows = validateBeforeGenerate(true);
-			if (!tripRows) {
-				return;
-			}
-			const massRows = filterDatasetByOperator(tripRows, selectedOperators);
-			if (!massRows.length) {
-				setError('Trip tidak ditemukan di data atau operator tidak sesuai.');
-				return;
-			}
-			generateMassUploadFile(massRows);
-			setSuccess('Mass Upload file berhasil digenerate.');
-			showReportSuccessToast(['Mass Upload file downloaded']);
-		} catch (error) {
-			setError(`Gagal generate report: ${error.message}`);
-			showReportErrorToast();
-		} finally {
-			setButtonLoading(generateMassBtn, false);
-		}
-	});
 
 	copyTrackingBtn.addEventListener('click', () => {
 		const tripRows = validateBeforeGenerate(true);
@@ -1804,6 +2996,9 @@ function init() {
 	});
 
 	generateAllBtn.addEventListener('click', generateAllReports);
+	notificationLogBtn.addEventListener('click', openNotificationLog);
+	notificationLogCloseBtn.addEventListener('click', closeNotificationLog);
+	notificationLogClearBtn.addEventListener('click', clearNotificationLog);
 
 	toast.addEventListener('click', (event) => {
 		if (event.target.classList.contains('toast-close')) {
