@@ -15,7 +15,10 @@ let notificationAudioContext = null;
 let lastNotificationSoundAt = 0;
 let notificationLogEntries = [];
 let prealertUploadedPdfFile = null;
+let customErrorAudioElement = null;
 const modalCloseTimers = new WeakMap();
+// Optional custom error sound file (example: 'sounds/oink.mp3').
+const ERROR_NOTIFICATION_SOUND_URL = 'sounds/error.mp3';
 
 // API endpoint for automatic draft creation (host your backend service URL here).
 const PREALERT_DRAFT_API_URL = '';
@@ -258,6 +261,47 @@ function getNotificationAudioContext() {
 	return notificationAudioContext;
 }
 
+function getCustomErrorAudioElement() {
+	const soundUrl = normalize(ERROR_NOTIFICATION_SOUND_URL);
+	if (!soundUrl) {
+		return null;
+	}
+
+	if (!customErrorAudioElement || !customErrorAudioElement.src.includes(soundUrl)) {
+		customErrorAudioElement = new Audio(soundUrl);
+		customErrorAudioElement.preload = 'auto';
+	}
+
+	return customErrorAudioElement;
+}
+
+function unlockNotificationAudio() {
+	const audioContext = getNotificationAudioContext();
+	if (audioContext?.state === 'suspended') {
+		audioContext.resume().catch(() => {});
+	}
+
+	const customAudio = getCustomErrorAudioElement();
+	if (!customAudio) {
+		return;
+	}
+
+	customAudio.muted = true;
+	customAudio.currentTime = 0;
+	const warmupPromise = customAudio.play();
+	if (warmupPromise && typeof warmupPromise.then === 'function') {
+		warmupPromise
+			.then(() => {
+				customAudio.pause();
+				customAudio.currentTime = 0;
+				customAudio.muted = false;
+			})
+			.catch(() => {
+				customAudio.muted = false;
+			});
+	}
+}
+
 function playNotificationSound(type) {
 	if (!['success', 'error', 'warning'].includes(type)) {
 		return;
@@ -266,6 +310,26 @@ function playNotificationSound(type) {
 	const now = Date.now();
 	if (now - lastNotificationSoundAt < 220) {
 		return;
+	}
+
+	if (type === 'error') {
+		const customAudio = getCustomErrorAudioElement();
+		if (customAudio) {
+			try {
+				customAudio.pause();
+				customAudio.currentTime = 0;
+				customAudio.volume = 1;
+				customAudio.muted = false;
+				const playPromise = customAudio.play();
+				if (playPromise && typeof playPromise.catch === 'function') {
+					playPromise.catch(() => {});
+				}
+				lastNotificationSoundAt = now;
+				return;
+			} catch (error) {
+				// Fall back to synthesized error tone below.
+			}
+		}
 	}
 
 	const audioContext = getNotificationAudioContext();
@@ -329,25 +393,80 @@ function playNotificationSound(type) {
 		return;
 	}
 
-	const errorOscA = audioContext.createOscillator();
-	const errorOscB = audioContext.createOscillator();
-	errorOscA.type = 'sawtooth';
-	errorOscB.type = 'triangle';
-	errorOscA.frequency.setValueAtTime(320, baseTime);
-	errorOscA.frequency.exponentialRampToValueAtTime(170, baseTime + 0.34);
-	errorOscB.frequency.setValueAtTime(210, baseTime);
-	errorOscB.frequency.exponentialRampToValueAtTime(130, baseTime + 0.34);
-	errorOscA.connect(gainNode);
-	errorOscB.connect(gainNode);
+	const emitOinkFallback = () => {
+		const synthBaseTime = audioContext.currentTime;
+		const synthGainNode = audioContext.createGain();
+		synthGainNode.connect(audioContext.destination);
+		synthGainNode.gain.setValueAtTime(0.0001, synthBaseTime);
 
-	gainNode.gain.linearRampToValueAtTime(0.11, baseTime + 0.02);
-	gainNode.gain.linearRampToValueAtTime(0.085, baseTime + 0.16);
-	gainNode.gain.exponentialRampToValueAtTime(0.0001, baseTime + 0.36);
+		// Build a very clear "oink-oink" style error sound.
+		const oinkTimes = [synthBaseTime, synthBaseTime + 0.18];
 
-	errorOscA.start(baseTime);
-	errorOscB.start(baseTime + 0.02);
-	errorOscA.stop(baseTime + 0.36);
-	errorOscB.stop(baseTime + 0.36);
+		for (const startAt of oinkTimes) {
+			const oscMain = audioContext.createOscillator();
+			const oscSub = audioContext.createOscillator();
+			const formantFilter = audioContext.createBiquadFilter();
+			const noiseFilter = audioContext.createBiquadFilter();
+			const mixGain = audioContext.createGain();
+			const noiseGain = audioContext.createGain();
+
+			oscMain.type = 'square';
+			oscSub.type = 'triangle';
+			oscMain.frequency.setValueAtTime(260, startAt);
+			oscMain.frequency.exponentialRampToValueAtTime(170, startAt + 0.05);
+			oscMain.frequency.exponentialRampToValueAtTime(95, startAt + 0.14);
+			oscSub.frequency.setValueAtTime(190, startAt);
+			oscSub.frequency.exponentialRampToValueAtTime(110, startAt + 0.14);
+			oscSub.detune.setValueAtTime(-16, startAt);
+
+			formantFilter.type = 'bandpass';
+			formantFilter.frequency.setValueAtTime(640, startAt);
+			formantFilter.Q.setValueAtTime(2.8, startAt);
+
+			mixGain.gain.setValueAtTime(0.0001, startAt);
+			mixGain.gain.linearRampToValueAtTime(0.42, startAt + 0.01);
+			mixGain.gain.linearRampToValueAtTime(0.22, startAt + 0.06);
+			mixGain.gain.exponentialRampToValueAtTime(0.0001, startAt + 0.16);
+
+			noiseFilter.type = 'highpass';
+			noiseFilter.frequency.setValueAtTime(560, startAt);
+			noiseFilter.Q.setValueAtTime(0.7, startAt);
+
+			noiseGain.gain.setValueAtTime(0.0001, startAt);
+			noiseGain.gain.linearRampToValueAtTime(0.08, startAt + 0.01);
+			noiseGain.gain.exponentialRampToValueAtTime(0.0001, startAt + 0.11);
+
+			const noiseBuffer = audioContext.createBuffer(1, Math.floor(audioContext.sampleRate * 0.18), audioContext.sampleRate);
+			const noiseData = noiseBuffer.getChannelData(0);
+			for (let i = 0; i < noiseData.length; i += 1) {
+				noiseData[i] = (Math.random() * 2 - 1) * 0.9;
+			}
+			const noiseSource = audioContext.createBufferSource();
+			noiseSource.buffer = noiseBuffer;
+
+			oscMain.connect(formantFilter);
+			oscSub.connect(formantFilter);
+			formantFilter.connect(mixGain);
+			mixGain.connect(synthGainNode);
+
+			noiseSource.connect(noiseFilter);
+			noiseFilter.connect(noiseGain);
+			noiseGain.connect(synthGainNode);
+
+			oscMain.start(startAt);
+			oscSub.start(startAt + 0.003);
+			noiseSource.start(startAt);
+			oscMain.stop(startAt + 0.16);
+			oscSub.stop(startAt + 0.16);
+			noiseSource.stop(startAt + 0.16);
+		}
+
+		synthGainNode.gain.linearRampToValueAtTime(0.78, synthBaseTime + 0.012);
+		synthGainNode.gain.linearRampToValueAtTime(0.62, synthBaseTime + 0.18);
+		synthGainNode.gain.exponentialRampToValueAtTime(0.0001, synthBaseTime + 0.44);
+	};
+
+	emitOinkFallback();
 }
 
 function hideToast() {
@@ -3254,6 +3373,7 @@ function init() {
 	setUploaderState('empty');
 	resetLoadedMeta();
 	initTheme();
+	document.addEventListener('pointerdown', unlockNotificationAudio, { once: true });
 	renderNotificationLog();
 	setPrealertUploadInfo('Belum ada file PDF dipilih.', 'info');
 	setPrealertUploadState('idle', 0, 'Ready', 'Pilih file untuk mulai parsing.');
