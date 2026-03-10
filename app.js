@@ -16,10 +16,126 @@ let lastNotificationSoundAt = 0;
 let notificationLogEntries = [];
 const modalCloseTimers = new WeakMap();
 
-// Fill this after deploying Google Apps Script Web App, for full auto draft without Ctrl+V.
-const PREALERT_GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbzNSzGLLp9f5DecJXJ8zfy_UXtdrbr4oV5E84aCfi2KadHtG8ZW5Q9HaQE3sycElEIVOg/exec';
+// API endpoint for automatic draft creation (host your backend service URL here).
+const PREALERT_DRAFT_API_URL = '';
+// Force direct Gmail API flow and skip Apps Script/backend endpoint.
+const PREALERT_FORCE_DIRECT_GMAIL_API = true;
+const PREALERT_OAUTH_CONFIG_KEY = 'prealert_oauth_config_v1';
+const runtimeOAuthConfig = (() => {
+	if (typeof window === 'undefined' || !window.localStorage) {
+		return {};
+	}
+
+	try {
+		const raw = window.localStorage.getItem(PREALERT_OAUTH_CONFIG_KEY);
+		return raw ? JSON.parse(raw) : {};
+	} catch (error) {
+		return {};
+	}
+})();
+
+// Optional Google OAuth client info for direct Gmail API fallback.
+const PREALERT_GOOGLE_CLIENT_ID = String(runtimeOAuthConfig.clientId || '').trim();
+const PREALERT_GOOGLE_CLIENT_SECRET = String(runtimeOAuthConfig.clientSecret || '').trim();
+// Optional refresh token for automatic access-token renewal (direct Gmail API fallback).
+const PREALERT_GOOGLE_REFRESH_TOKEN = String(runtimeOAuthConfig.refreshToken || '').trim();
+// Optional bearer token bootstrap for first request.
+const PREALERT_DRAFT_API_TOKEN = String(runtimeOAuthConfig.accessToken || '').trim();
 // Optional: force draft recipient (recommended for team shared mailbox).
 const PREALERT_DRAFT_RECIPIENT = '';
+const PREALERT_TOKEN_CACHE_KEY = 'prealert_gmail_oauth_cache_v1';
+// Default recipients for Pre-Alert email.
+const PREALERT_TO_RECIPIENTS = [
+	'panggih.harto@spxexpress.com',
+	'afrid.febrian@spxexpress.com',
+	'a.rosyid@spxexpress.com',
+	'hendry.saputra@spxexpress.com',
+	'bas_benediktus.manurung@spx-external.com',
+	'doddy.laksono@spx-external.com',
+	'bas_m.anugrah@spx-external.com',
+	'fg_nana.suryana@spx-external.com',
+	'bas_dimas.pambudi@shopee-external.com'
+];
+const PREALERT_CC_RECIPIENTS = [
+	{ name: 'Ahmad Syafiq Salafi', email: 'ahmad.salafi@spxexpress.com' },
+	{ name: 'Aris Rahman Saputra', email: 'aris.saputra@spxexpress.com' },
+	{ name: 'Atikah Suharti', email: 'atikah.suharti@shopee-xpress.com' },
+	{ name: 'Audry Nissa Oktawina', email: 'audry.oktawina@spxexpress.com' },
+	{ name: 'Ega Apriliawan', email: 'ega.apriliawan@spxexpress.com' },
+	{ name: 'Egi Hendriko', email: 'egi.hendriko@spxexpress.com' },
+	{ name: 'Eki Maulana', email: 'eki.maulana@spxexpress.com' },
+	{ name: 'Ermi Nurwiati', email: 'ermi.nurwiati@spxexpress.com' },
+	{ name: 'Hartias Rizalina', email: 'hartias.rizalina@spxexpress.com' },
+	{ name: 'Inka Novianti Tarigan', email: 'inka.tarigan@spxexpress.com' },
+	{ name: 'Saepul Bahri', email: 'ipi_saepul.bahri@spx-external.com' },
+	{ name: 'Irawan Tri Atmodjo', email: 'irawan.tri@spxexpress.com' },
+	{ name: 'Rifky Alfandi', email: 'rifky.alfandi@spxexpress.com' },
+	{ name: 'Salma Farah Yuliani', email: 'salma.yuliani@spxexpress.com' },
+	{ name: 'Siska Febriyanti', email: 'siska.febriyanti@spxexpress.com' },
+	{ name: 'Sugama Sugama', email: 'ugbm_sugama.sugama@spx-external.com' },
+	{ name: 'Virgiawan Bachtiar', email: 'virgiawan.bachtiar@spxexpress.com' },
+	{ name: 'Feizal Umar Syah', email: 'feizal.syah@spx-external.com' },
+	{ name: 'Wahyu Fitri Astuti', email: 'wahyu.astuti@spxexpress.com' }
+];
+let prealertRuntimeAccessToken = PREALERT_DRAFT_API_TOKEN;
+
+function loadCachedPrealertAccessToken() {
+	if (typeof window === 'undefined' || !window.localStorage) {
+		return '';
+	}
+
+	try {
+		const raw = window.localStorage.getItem(PREALERT_TOKEN_CACHE_KEY);
+		if (!raw) {
+			return '';
+		}
+
+		const cached = JSON.parse(raw);
+		const accessToken = String(cached?.accessToken || '').trim();
+		const expiresAt = Number(cached?.expiresAt || 0);
+		if (!accessToken || !expiresAt) {
+			return '';
+		}
+
+		// Keep a small buffer so token is refreshed before it actually expires.
+		if (Date.now() >= (expiresAt - 60000)) {
+			return '';
+		}
+
+		return accessToken;
+	} catch (error) {
+		return '';
+	}
+}
+
+function saveCachedPrealertAccessToken(accessToken, expiresInSeconds) {
+	if (typeof window === 'undefined' || !window.localStorage) {
+		return;
+	}
+
+	try {
+		const ttlSeconds = Math.max(Number(expiresInSeconds || 3600), 120);
+		const expiresAt = Date.now() + (ttlSeconds * 1000);
+		window.localStorage.setItem(PREALERT_TOKEN_CACHE_KEY, JSON.stringify({
+			accessToken: String(accessToken || ''),
+			expiresAt
+		}));
+	} catch (error) {
+		// Ignore storage errors.
+	}
+}
+
+function clearCachedPrealertAccessToken() {
+	if (typeof window === 'undefined' || !window.localStorage) {
+		return;
+	}
+
+	try {
+		window.localStorage.removeItem(PREALERT_TOKEN_CACHE_KEY);
+	} catch (error) {
+		// Ignore storage errors.
+	}
+}
 
 const COL = {
 	SPX: 2,
@@ -57,6 +173,9 @@ const tripDetectedCount = document.getElementById('tripDetectedCount');
 const selectAllOperatorsBtn = document.getElementById('selectAllOperatorsBtn');
 const clearOperatorsBtn = document.getElementById('clearOperatorsBtn');
 const copyTrackingBtn = document.getElementById('copyTrackingBtn');
+const copyLinehaulReportBtn = document.getElementById('copyLinehaulReportBtn');
+const copyBulkyReportBtn = document.getElementById('copyBulkyReportBtn');
+const copyHourlyReportBtn = document.getElementById('copyHourlyReportBtn');
 const generateTOBtn = document.getElementById('generateTOBtn');
 const generateAllBtn = document.getElementById('generateAllBtn');
 const totalDataEl = document.getElementById('totalData');
@@ -814,12 +933,85 @@ function getIndonesianReportDate() {
 	return `${day}-${monthLabel}-${year}`;
 }
 
+function getLinehaulQtyFromReportData() {
+	const candidates = [
+		getTextValue(orderQtyEl),
+		getTextValue(totalToQtyEl),
+		getTextValue(hvQtyEl)
+	];
+
+	const found = candidates.find((value) => value && value !== '-');
+	if (found) {
+		return found;
+	}
+
+	const fallback = normalize(filteredDataEl?.textContent || totalDataEl?.textContent);
+	return fallback || '-';
+}
+
+function buildLinehaulReportTemplateText() {
+	const { slot } = getReportSelectionContext();
+	const qty = getLinehaulQtyFromReportData();
+
+	return [
+		'Ciputat 4 First Mile Hub',
+		'',
+		`   1. Slot = ${slot}`,
+		`   2. Qty = ${qty}`,
+		'',
+		'Terima-kasih'
+	].join('\n');
+}
+
+function buildBulkyReportTemplateText() {
+	const { slot } = getReportSelectionContext();
+	const dateLabel = getIndonesianReportDate().replaceAll('-', ' ');
+	return `Bulky Slot ${slot} - ${dateLabel}`;
+}
+
+function buildHourlyReportTemplateText() {
+	const dateLabel = getIndonesianReportDate().replaceAll('-', ' ');
+	return `HOURLY PERFORMANCE DIALOGUE DASHBOARD CIPUTAT 4 FIRST MILE HUB, TANGGAL ${dateLabel}`;
+}
+
+async function copyReportTemplateText(templateType) {
+	let text = '';
+	let label = '';
+
+	if (templateType === 'linehaul') {
+		text = buildLinehaulReportTemplateText();
+		label = 'Linehaul Report';
+	}
+
+	if (templateType === 'bulky') {
+		text = buildBulkyReportTemplateText();
+		label = 'Bulky Report';
+	}
+
+	if (templateType === 'hourly') {
+		text = buildHourlyReportTemplateText();
+		label = 'Hourly Report';
+	}
+
+	if (!text) {
+		setError('Template report tidak valid.');
+		return;
+	}
+
+	try {
+		await navigator.clipboard.writeText(text);
+		setSuccess(`${label} berhasil di-copy.`);
+	} catch (error) {
+		setError(`Gagal copy ${label}: ${error.message}`);
+	}
+}
+
 function buildPrealertSubject() {
 	const { slot } = getReportSelectionContext();
 	const destination = getTextValue(destinationEl);
 	const subjectDestination = destination === '-' ? 'DESTINATION' : destination.toUpperCase();
 	const slotTripNumber = getSlotTripNumber(slot);
-	const formattedDate = getIndonesianReportDate();
+	const formattedDate = getIndonesianReportDate().replaceAll('-', ' ');
 
 	return `PRE ALERT - AMH CIPUTAT 4 FM TO ${subjectDestination} - TRIP ${slotTripNumber} - (${formattedDate})`;
 }
@@ -850,23 +1042,30 @@ function buildPrealertBody() {
 	];
 
 	const htmlRows = rows
-		.map(([label, value]) => `<tr><td>${escapeHtml(label)}</td><td>${escapeHtml(value)}</td></tr>`)
+		.map(([label, value]) => `
+			<tr>
+				<td style="border:1px solid #111827;padding:8px 10px;font-size:13px;font-weight:600;background:#f8fafc;width:46%;vertical-align:top;">${escapeHtml(label)}</td>
+				<td style="border:1px solid #111827;padding:8px 10px;font-size:13px;color:#0f172a;vertical-align:top;">${escapeHtml(value)}</td>
+			</tr>
+		`)
 		.join('');
 
 	const html = `
-		<div class="email-body-wrap">
-			<p>Dear All</p>
-			<p>Berikut Terlampir Surat Jalan From Ciputat 4 AMH To ${escapeHtml(destination)}</p>
-			<table class="email-body-table">
+		<div style="font-family:Segoe UI,Arial,sans-serif;font-size:14px;line-height:1.55;color:#0f172a;max-width:620px;">
+			<p style="margin:0 0 10px;">Dear All</p>
+			<p style="margin:0 0 12px;">Berikut Terlampir Surat Jalan From Ciputat 4 AMH To ${escapeHtml(destination)}</p>
+			<table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;max-width:560px;border-collapse:collapse;margin:8px 0 12px;background:#ffffff;">
 				<thead>
-					<tr><th colspan="2">CIPUTAT 4 FM</th></tr>
+					<tr>
+						<th colspan="2" style="border:1px solid #111827;padding:9px 10px;background:#8dc63f;color:#0f172a;text-align:center;font-size:14px;font-weight:800;letter-spacing:0.2px;">CIPUTAT 4 FM</th>
+					</tr>
 				</thead>
 				<tbody>
 					${htmlRows}
 				</tbody>
 			</table>
-			<p class="email-footnote">Noted: Jika dalam waktu 3 jam setelah barang sampai tidak ada feedback yang diberikan, maka segala hal yang berkenan dengan paket menjadi tanggungan pihak next station.</p>
-			<p>terima kasih--</p>
+			<p style="margin:0 0 10px;font-size:12px;line-height:1.55;color:#334155;"><b>Noted:</b> Apabila dalam waktu 3 jam setelah shipment tiba tidak terdapat feedback dari pihak penerima, maka seluruh tanggung jawab terkait paket dianggap telah diterima oleh next station.</p>
+			<p style="margin:0;">Terima-kasih</p>
 		</div>
 	`;
 
@@ -878,9 +1077,9 @@ function buildPrealertBody() {
 		'=== CIPUTAT 4 FM ===',
 		...rows.map(([label, value]) => `${label}: ${value}`),
 		'',
-		'Noted: Jika dalam waktu 3 jam setelah barang sampai tidak ada feedback yang diberikan, maka segala hal yang berkenan dengan paket menjadi tanggungan pihak next station.',
+		'Noted: Apabila dalam waktu 3 jam setelah shipment tiba tidak terdapat feedback dari pihak penerima, maka seluruh tanggung jawab terkait paket dianggap telah diterima oleh next station.',
 		'',
-		'terima kasih--'
+		'Terima-kasih'
 	].join('\n');
 
 	return {
@@ -915,148 +1114,397 @@ function sanitizePrealertRecipient(rawRecipient) {
 	return isEmail ? value : '';
 }
 
-function openAppsScriptDraftViaFormPost(url, payload) {
-	const form = document.createElement('form');
-	const targetName = `prealert_draft_${Date.now()}`;
+function isValidEmailAddress(value) {
+	return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').trim());
+}
 
-	form.method = 'POST';
-	form.action = url;
-	form.target = targetName;
-	form.enctype = 'application/x-www-form-urlencoded';
-	form.style.display = 'none';
-
-	const input = document.createElement('input');
-	input.type = 'hidden';
-	input.name = 'payload';
-	input.value = JSON.stringify(payload);
-	form.appendChild(input);
-
-	document.body.appendChild(form);
-	const popup = window.open('about:blank', targetName);
-	if (!popup) {
-		form.remove();
-		return false;
+function formatMailboxAddress(name, email) {
+	const safeEmail = String(email || '').trim();
+	if (!safeEmail) {
+		return '';
 	}
 
-	form.submit();
-	form.remove();
+	const safeName = String(name || '').trim().replace(/"/g, '\\"');
+	return safeName ? `"${safeName}" <${safeEmail}>` : safeEmail;
+}
 
-	return true;
+function buildPrealertRecipients() {
+	const forcedRecipient = sanitizePrealertRecipient(PREALERT_DRAFT_RECIPIENT);
+	const toSet = new Set(
+		PREALERT_TO_RECIPIENTS
+			.map((item) => String(item || '').trim().toLowerCase())
+			.filter((email) => isValidEmailAddress(email))
+	);
+	if (forcedRecipient) {
+		toSet.add(forcedRecipient.toLowerCase());
+	}
+
+	const toEmails = Array.from(toSet);
+	const ccEntries = PREALERT_CC_RECIPIENTS
+		.map((item) => ({
+			name: String(item?.name || '').trim(),
+			email: String(item?.email || '').trim().toLowerCase()
+		}))
+		.filter((item) => isValidEmailAddress(item.email));
+
+	const toHeader = toEmails.length ? toEmails.join(', ') : 'undisclosed-recipients:;';
+	const ccHeader = ccEntries.length
+		? ccEntries.map((item) => formatMailboxAddress(item.name, item.email)).join(', ')
+		: '';
+
+	return {
+		toEmails,
+		ccEmails: ccEntries.map((item) => item.email),
+		toHeader,
+		ccHeader,
+		toQuery: toEmails.join(','),
+		ccQuery: ccEntries.map((item) => item.email).join(',')
+	};
+}
+
+async function requestPrealertDraftViaApi(payload) {
+	if (!PREALERT_DRAFT_API_URL) {
+		throw new Error('API URL belum diisi di PREALERT_DRAFT_API_URL');
+	}
+
+	const apiUrl = String(PREALERT_DRAFT_API_URL || '').trim();
+	if (/github\.io/i.test(apiUrl) || /doaltaspace\.github\.io/i.test(apiUrl)) {
+		throw new Error('PREALERT_DRAFT_API_URL harus endpoint backend API, bukan URL frontend GitHub Pages.');
+	}
+
+	if (/script\.google(?:usercontent)?\.com/i.test(apiUrl)) {
+		throw new Error('Mode ini non-Apps Script. Kosongkan PREALERT_DRAFT_API_URL atau pakai backend API Anda sendiri (bukan script.googleusercontent/script.google.com).');
+	}
+
+	const headers = {
+		'Content-Type': 'application/json'
+	};
+
+	if (PREALERT_DRAFT_API_TOKEN) {
+		headers.Authorization = `Bearer ${PREALERT_DRAFT_API_TOKEN}`;
+	}
+
+	const response = await fetch(PREALERT_DRAFT_API_URL, {
+		method: 'POST',
+		headers,
+		body: JSON.stringify(payload)
+	});
+
+	const rawText = await response.text();
+	let result = {};
+	try {
+		result = rawText ? JSON.parse(rawText) : {};
+	} catch (error) {
+		result = {
+			success: response.ok,
+			message: rawText || `HTTP ${response.status}`
+		};
+	}
+
+	if (!response.ok || result.success === false) {
+		throw new Error(result.message || `HTTP ${response.status}`);
+	}
+
+	return result;
+}
+
+function encodeUtf8ToBase64Url(value) {
+	const bytes = new TextEncoder().encode(String(value || ''));
+	let binary = '';
+	bytes.forEach((byte) => {
+		binary += String.fromCharCode(byte);
+	});
+
+	return btoa(binary)
+		.replace(/\+/g, '-')
+		.replace(/\//g, '_')
+		.replace(/=+$/g, '');
+}
+
+function isRevokedOrExpiredTokenMessage(message) {
+	return /expired or revoked|invalid_grant|invalid credentials|invalid[_ ]token/i.test(String(message || ''));
+}
+
+function buildDirectApiTokenHelpMessage(rawMessage) {
+	if (!isRevokedOrExpiredTokenMessage(rawMessage)) {
+		return rawMessage;
+	}
+
+	return 'Token Gmail API kadaluarsa/revoked. Generate refresh token baru (offline access + prompt consent), update PREALERT_GOOGLE_REFRESH_TOKEN, lalu coba lagi.';
+}
+
+async function requestPrealertDraftDirectGmail(payload) {
+	if (!prealertRuntimeAccessToken) {
+		prealertRuntimeAccessToken = loadCachedPrealertAccessToken();
+	}
+
+	if (!prealertRuntimeAccessToken && !PREALERT_GOOGLE_REFRESH_TOKEN) {
+		throw new Error('Bearer token belum diisi');
+	}
+
+	const toHeader = payload.toHeader || payload.recipient || PREALERT_DRAFT_RECIPIENT || 'undisclosed-recipients:;';
+	const ccHeader = payload.ccHeader || '';
+	const mimeHeaders = [
+		`To: ${toHeader}`,
+		`Subject: ${payload.subject}`,
+		'MIME-Version: 1.0',
+		'Content-Type: text/html; charset="UTF-8"'
+	];
+
+	if (ccHeader) {
+		mimeHeaders.splice(1, 0, `Cc: ${ccHeader}`);
+	}
+
+	const mime = [
+		...mimeHeaders,
+		'',
+		payload.htmlBody || payload.textBody || ''
+	].join('\r\n');
+
+	const raw = encodeUtf8ToBase64Url(mime);
+
+	const createDraft = async (accessToken) => fetch('https://gmail.googleapis.com/gmail/v1/users/me/drafts', {
+		method: 'POST',
+		headers: {
+			'Content-Type': 'application/json',
+			Authorization: `Bearer ${accessToken}`
+		},
+		body: JSON.stringify({ message: { raw } })
+	});
+
+	const refreshAccessToken = async () => {
+		if (!PREALERT_GOOGLE_CLIENT_ID || !PREALERT_GOOGLE_CLIENT_SECRET || !PREALERT_GOOGLE_REFRESH_TOKEN) {
+			throw new Error('Refresh token belum diisi (PREALERT_GOOGLE_REFRESH_TOKEN)');
+		}
+
+		const tokenResp = await fetch('https://oauth2.googleapis.com/token', {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/x-www-form-urlencoded'
+			},
+			body: new URLSearchParams({
+				client_id: PREALERT_GOOGLE_CLIENT_ID,
+				client_secret: PREALERT_GOOGLE_CLIENT_SECRET,
+				refresh_token: PREALERT_GOOGLE_REFRESH_TOKEN,
+				grant_type: 'refresh_token'
+			}).toString()
+		});
+
+		const tokenText = await tokenResp.text();
+		let tokenData = {};
+		try {
+			tokenData = tokenText ? JSON.parse(tokenText) : {};
+		} catch (error) {
+			tokenData = {};
+		}
+
+		if (!tokenResp.ok || !tokenData.access_token) {
+			const tokenError = tokenData.error_description || tokenData.error || `Token refresh gagal (HTTP ${tokenResp.status})`;
+			throw new Error(buildDirectApiTokenHelpMessage(tokenError));
+		}
+
+		prealertRuntimeAccessToken = tokenData.access_token;
+		saveCachedPrealertAccessToken(prealertRuntimeAccessToken, tokenData.expires_in);
+		return prealertRuntimeAccessToken;
+	};
+
+	if (!prealertRuntimeAccessToken && PREALERT_GOOGLE_REFRESH_TOKEN) {
+		await refreshAccessToken();
+	}
+
+	let response = await createDraft(prealertRuntimeAccessToken);
+
+	const text = await response.text();
+	let result = {};
+	try {
+		result = text ? JSON.parse(text) : {};
+	} catch (error) {
+		result = {};
+	}
+
+	const needRefresh = response.status === 401
+		|| response.status === 403
+		|| /invalid[_ ]token|invalid credentials|expired/i.test(result.error?.message || '');
+	if (needRefresh && PREALERT_GOOGLE_REFRESH_TOKEN) {
+		clearCachedPrealertAccessToken();
+		prealertRuntimeAccessToken = '';
+		const newToken = await refreshAccessToken();
+		response = await createDraft(newToken);
+		const retryText = await response.text();
+		try {
+			result = retryText ? JSON.parse(retryText) : {};
+		} catch (error) {
+			result = {};
+		}
+	}
+
+	if (!response.ok) {
+		const message = result.error?.message || `HTTP ${response.status}`;
+		throw new Error(buildDirectApiTokenHelpMessage(message));
+	}
+
+	return {
+		success: true,
+		message: 'Draft berhasil dibuat via Gmail API token.',
+		draftId: result.id,
+		draftUrl: result.id ? `https://mail.google.com/mail/u/0/#drafts?compose=${encodeURIComponent(result.id)}` : ''
+	};
 }
 
 async function generateGmailDraft() {
 	const subject = buildPrealertSubject();
 	const body = buildPrealertBody();
-	const recipient = sanitizePrealertRecipient(PREALERT_DRAFT_RECIPIENT);
+	const recipients = buildPrealertRecipients();
+	const autoDraftConfigured = Boolean(PREALERT_DRAFT_API_URL)
+		|| Boolean(PREALERT_GOOGLE_REFRESH_TOKEN)
+		|| prealertRuntimeAccessToken.startsWith('ya29.');
 	const payload = {
 		subject,
 		htmlBody: body.html,
 		textBody: body.text,
 		source: 'Ciputat 4 First Mile Hub',
-		recipient: recipient || undefined
+		recipient: recipients.toEmails[0] || undefined,
+		to: recipients.toEmails,
+		cc: recipients.ccEmails,
+		toHeader: recipients.toHeader,
+		ccHeader: recipients.ccHeader
 	};
+	const directModeEnabled = PREALERT_FORCE_DIRECT_GMAIL_API;
 
-	if (PREALERT_GAS_WEB_APP_URL) {
-		setButtonLoading(generateGmailDraftBtn, true, 'Creating Draft...');
+	const openManualDraftCompose = async () => {
+		const query = new URLSearchParams({
+			view: 'cm',
+			fs: '1',
+			su: subject
+		});
+
+		if (recipients.toQuery) {
+			query.set('to', recipients.toQuery);
+		}
+
+		if (recipients.ccQuery) {
+			query.set('cc', recipients.ccQuery);
+		}
+
+		const gmailUrl = `https://mail.google.com/mail/?${query.toString()}`;
+
+		window.open(gmailUrl, '_blank', 'noopener');
+
+		// Gmail compose URL only supports plain text body, so we copy HTML and ask user to paste.
+		if (navigator.clipboard && window.ClipboardItem) {
+			try {
+				const item = new ClipboardItem({
+					'text/html': new Blob([body.html], { type: 'text/html' }),
+					'text/plain': new Blob([body.text], { type: 'text/plain' })
+				});
+				await navigator.clipboard.write([item]);
+				setSuccess('Gmail draft dibuka. Template tabel sudah di-copy. Paste (Ctrl+V) di body email agar tampil tabel.');
+				return;
+			} catch (error) {
+				// Fallback to plain text clipboard below.
+			}
+		}
+
+		// Legacy clipboard fallback for browsers that block ClipboardItem rich HTML.
 		try {
-			const response = await fetch(PREALERT_GAS_WEB_APP_URL, {
-				method: 'POST',
-				headers: {
-					// Apps Script accepts plain text JSON and this avoids many browser preflight issues.
-					'Content-Type': 'text/plain;charset=utf-8'
-				},
-				credentials: 'include',
-				body: JSON.stringify(payload)
-			});
+			const hidden = document.createElement('div');
+			hidden.innerHTML = body.html;
+			hidden.style.position = 'fixed';
+			hidden.style.left = '-99999px';
+			hidden.style.top = '0';
+			document.body.appendChild(hidden);
 
-			if (!response.ok) {
-				throw new Error(`HTTP ${response.status}`);
-			}
+			const range = document.createRange();
+			range.selectNodeContents(hidden);
+			const selection = window.getSelection();
+			selection?.removeAllRanges();
+			selection?.addRange(range);
 
-			const result = await response.json().catch(() => ({}));
-			if (!result.success) {
-				throw new Error(result.message || 'Draft creation failed');
-			}
+			const copied = document.execCommand('copy');
+			selection?.removeAllRanges();
+			hidden.remove();
 
-			window.open('https://mail.google.com/mail/#drafts', '_blank', 'noopener');
-			setSuccess(`Draft Gmail otomatis berhasil dibuat${result.recipient ? ` untuk ${result.recipient}` : ''}. Silakan cek folder Drafts.`);
-			return;
-		} catch (error) {
-			if (/Gmail operation not allowed/i.test(String(error?.message || ''))) {
-				setWarning('Apps Script belum diizinkan akses Gmail. Set deployment ke Execute as: Me, jalankan authorizeGmailScopes(), lalu redeploy.');
+			if (copied) {
+				setSuccess('Gmail draft dibuka. Template tabel berhasil di-copy. Paste (Ctrl+V) di body email.');
 				return;
 			}
+		} catch (error) {
+			// Continue to plain text fallback.
+		}
 
+		if (navigator.clipboard) {
 			try {
-				const opened = openAppsScriptDraftViaFormPost(PREALERT_GAS_WEB_APP_URL, payload);
-				if (opened) {
-					setWarning('Koneksi langsung ke Apps Script dibatasi browser. Draft dicoba lewat fallback POST tab terpisah, lalu cek folder Drafts Gmail.');
-					return;
-				}
-			} catch (popupError) {
-				// Continue to manual mode fallback below.
+				await navigator.clipboard.writeText(body.text);
+				setWarning('Gmail draft dibuka. Browser hanya mengizinkan copy teks, jadi tabel tidak otomatis.');
+				return;
+			} catch (error) {
+				setWarning('Gmail draft dibuka. Silakan copy manual dari Email Preview.');
+			}
+		}
+	};
+
+	if (PREALERT_DRAFT_API_URL && !directModeEnabled) {
+		setButtonLoading(generateGmailDraftBtn, true, 'Creating Draft...');
+		try {
+			const result = await requestPrealertDraftViaApi(payload);
+			if (result.draftUrl) {
+				window.open(result.draftUrl, '_blank', 'noopener');
+			} else {
+				window.open('https://mail.google.com/mail/#drafts', '_blank', 'noopener');
 			}
 
-			setWarning(`Auto draft belum aktif (${error.message}). Fallback ke mode manual.`);
+			setSuccess(result.message || `Draft Gmail otomatis berhasil dibuat${result.recipient ? ` untuk ${result.recipient}` : ''}.`);
+			return;
+		} catch (error) {
+			if (prealertRuntimeAccessToken.startsWith('ya29.') || PREALERT_GOOGLE_REFRESH_TOKEN) {
+				try {
+					const fallbackDirectResult = await requestPrealertDraftDirectGmail(payload);
+					if (fallbackDirectResult.draftUrl) {
+						window.open(fallbackDirectResult.draftUrl, '_blank', 'noopener');
+					} else {
+						window.open('https://mail.google.com/mail/#drafts', '_blank', 'noopener');
+					}
+					setSuccess(fallbackDirectResult.message || 'Draft Gmail otomatis berhasil dibuat.');
+					return;
+				} catch (directError) {
+					setWarning(`Auto draft via API gagal (${error.message}) dan direct Gmail API gagal (${directError.message}). Dialihkan ke compose manual.`);
+					await openManualDraftCompose();
+					return;
+				}
+			} else {
+				setWarning(`Auto draft via API gagal (${error.message}). Dialihkan ke compose manual.`);
+				await openManualDraftCompose();
+				return;
+			}
+		} finally {
+			setButtonLoading(generateGmailDraftBtn, false);
+		}
+	} else if (prealertRuntimeAccessToken.startsWith('ya29.') || PREALERT_GOOGLE_REFRESH_TOKEN) {
+		setButtonLoading(generateGmailDraftBtn, true, 'Creating Draft...');
+		try {
+			const result = await requestPrealertDraftDirectGmail(payload);
+			if (result.draftUrl) {
+				window.open(result.draftUrl, '_blank', 'noopener');
+			} else {
+				window.open('https://mail.google.com/mail/#drafts', '_blank', 'noopener');
+			}
+			setSuccess(result.message || 'Draft Gmail otomatis berhasil dibuat.');
+			return;
+		} catch (error) {
+			setWarning(`Direct Gmail API gagal (${error.message}). Dialihkan ke compose manual.`);
+			await openManualDraftCompose();
+			return;
 		} finally {
 			setButtonLoading(generateGmailDraftBtn, false);
 		}
 	}
-	const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&su=${encodeURIComponent(subject)}`;
 
-	window.open(gmailUrl, '_blank', 'noopener');
-
-	// Gmail compose URL only supports plain text body, so we copy HTML and ask user to paste.
-	if (navigator.clipboard && window.ClipboardItem) {
-		try {
-			const item = new ClipboardItem({
-				'text/html': new Blob([body.html], { type: 'text/html' }),
-				'text/plain': new Blob([body.text], { type: 'text/plain' })
-			});
-			await navigator.clipboard.write([item]);
-			setSuccess('Gmail draft dibuka. Template tabel sudah di-copy. Paste (Ctrl+V) di body email agar tampil tabel.');
-			return;
-		} catch (error) {
-			// Fallback to plain text clipboard below.
-		}
+	if (autoDraftConfigured) {
+		setError('Auto draft aktif, tapi pembuatan draft belum berhasil. Compose manual dibatalkan supaya tidak perlu paste manual.');
+		return;
 	}
 
-	// Legacy clipboard fallback for browsers that block ClipboardItem rich HTML.
-	try {
-		const hidden = document.createElement('div');
-		hidden.innerHTML = body.html;
-		hidden.style.position = 'fixed';
-		hidden.style.left = '-99999px';
-		hidden.style.top = '0';
-		document.body.appendChild(hidden);
-
-		const range = document.createRange();
-		range.selectNodeContents(hidden);
-		const selection = window.getSelection();
-		selection?.removeAllRanges();
-		selection?.addRange(range);
-
-		const copied = document.execCommand('copy');
-		selection?.removeAllRanges();
-		hidden.remove();
-
-		if (copied) {
-			setSuccess('Gmail draft dibuka. Template tabel berhasil di-copy. Paste (Ctrl+V) di body email.');
-			return;
-		}
-	} catch (error) {
-		// Continue to plain text fallback.
-	}
-
-	if (navigator.clipboard) {
-		try {
-			await navigator.clipboard.writeText(body.text);
-			setWarning('Gmail draft dibuka. Browser hanya mengizinkan copy teks, jadi tabel tidak otomatis.');
-			return;
-		} catch (error) {
-			setWarning('Gmail draft dibuka. Silakan copy manual dari Email Preview.');
-		}
-	}
+	await openManualDraftCompose();
 }
 
 function downloadPrealertReport() {
@@ -2957,6 +3405,18 @@ function init() {
 
 	slotSelect.addEventListener('change', updateReportSummary);
 	reportDateInput.addEventListener('change', updateReportSummary);
+
+	copyLinehaulReportBtn?.addEventListener('click', () => {
+		copyReportTemplateText('linehaul');
+	});
+
+	copyBulkyReportBtn?.addEventListener('click', () => {
+		copyReportTemplateText('bulky');
+	});
+
+	copyHourlyReportBtn?.addEventListener('click', () => {
+		copyReportTemplateText('hourly');
+	});
 
 	copyTrackingBtn.addEventListener('click', () => {
 		const tripRows = validateBeforeGenerate(true);

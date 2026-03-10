@@ -958,6 +958,45 @@ body.dark-mode .nav-item.active {
 	border-left: 4px solid var(--primary);
 }
 
+.report-template-card .muted {
+	margin-bottom: 12px;
+}
+
+.report-template-actions {
+	display: flex;
+	gap: 10px;
+	flex-wrap: wrap;
+}
+
+.report-template-btn {
+	width: auto;
+	padding: 10px 14px;
+	border-radius: 10px;
+	font-weight: 700;
+	border: 1px solid #ffd0b8;
+	background: linear-gradient(135deg, #fff4eb, #ffe7d8);
+	color: #8a3412;
+	cursor: pointer;
+	box-shadow: var(--shadow-3d-soft);
+	transition: transform 0.14s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+}
+
+.report-template-btn:hover {
+	transform: translateY(-1px);
+	box-shadow: var(--shadow-3d-strong);
+	background: linear-gradient(135deg, #ffe9d7, #ffd7bf);
+}
+
+body.dark-mode .report-template-btn {
+	border-color: #4b5563;
+	background: linear-gradient(135deg, #1f2937, #243244);
+	color: #f8d2b8;
+}
+
+body.dark-mode .report-template-btn:hover {
+	background: linear-gradient(135deg, #263244, #2f3f56);
+}
+
 .uploader-card {
 	min-height: 128px;
 	border-radius: 12px;
