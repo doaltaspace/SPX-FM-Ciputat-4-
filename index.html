@@ -14,7 +14,7 @@
 		<header class="header">
 			<div class="header-main">
 				<h1><span class="title-icon" aria-hidden="true"><img src="apk-males.svg" alt="" /></span> REPORT MALES</h1>
-				<p class="muted">Tool Generate Data REPORT MALES</p>
+				<p class="muted">Tool Generate Data Ciputat 4 First Mile Hub </p>
 			</div>
 			<div class="header-controls">
 				<span class="badge"><span class="badge-dot"></span> Offline Mode</span>
@@ -34,6 +34,7 @@
 		<div class="page-tabs">
 			<button class="tab active" data-tab="report">📊 Report</button>
 			<button class="tab" data-tab="prealert">✉️ Pre-Alert</button>
+			<button class="tab" data-tab="hourly">⏱️ Hourly Report</button>
 		</div>
 
 		<div id="reportPage" class="page active">
@@ -148,7 +149,7 @@
 						</div>
 					</div>
 					<div class="buttons">
-						<button id="generateAllBtn" type="button">⚡ Generate All Reports</button>
+						<button id="generateAllInlineBtn" type="button">⚡ Generate All Reports</button>
 					</div>
 				</div>
 
@@ -162,50 +163,52 @@
 			</section>
 
 			<section class="section section-right">
-				<h2 class="section-title">Preview Result</h2>
-				<div class="stats">
-					<div id="totalDataCard" class="stat stat-total">
-						<span class="stat-label">📦 Total Data</span>
-						<span class="stat-value" id="totalData">0</span>
+				<div class="tool-panel preview-result-panel">
+					<h2 class="section-title">Preview Result</h2>
+					<div class="stats">
+						<div id="totalDataCard" class="stat stat-total">
+							<span class="stat-label">📦 Total Data</span>
+							<span class="stat-value" id="totalData">0</span>
+						</div>
+						<div id="filteredDataCard" class="stat stat-filtered">
+							<span class="stat-label">📑 Bulky Data</span>
+							<span class="stat-value" id="filteredData">0</span>
+						</div>
 					</div>
-					<div id="filteredDataCard" class="stat stat-filtered">
-						<span class="stat-label">📑 Bulky Data</span>
-						<span class="stat-value" id="filteredData">0</span>
+
+					<div id="toStatusSummary" class="field preview-field to-status-summary">
+						<div class="preview-wrap">
+							<table>
+								<thead>
+									<tr>
+										<th>TO Status</th>
+										<th>Jumlah</th>
+									</tr>
+								</thead>
+								<tbody id="toStatusSummaryBody">
+									<tr><td colspan="2">Belum ada data.</td></tr>
+								</tbody>
+							</table>
+						</div>
 					</div>
-				</div>
 
-				<div id="toStatusSummary" class="field preview-field to-status-summary">
-					<div class="preview-wrap">
-						<table>
-							<thead>
-								<tr>
-									<th>TO Status</th>
-									<th>Jumlah</th>
-								</tr>
-							</thead>
-							<tbody id="toStatusSummaryBody">
-								<tr><td colspan="2">Belum ada data.</td></tr>
-							</tbody>
-						</table>
+					<div class="progress-section">
+						<div class="progress-title">Progress Indicator</div>
+						<ul id="progressList" class="progress-list">
+							<li data-step="filter">Filtering dataset</li>
+							<li data-step="mass">Generating Mass Upload file</li>
+							<li data-step="to">Generating TO Management Report</li>
+						</ul>
 					</div>
-				</div>
 
-				<div class="progress-section">
-					<div class="progress-title">Progress Indicator</div>
-					<ul id="progressList" class="progress-list">
-						<li data-step="filter">Filtering dataset</li>
-						<li data-step="mass">Generating Mass Upload file</li>
-						<li data-step="to">Generating TO Management Report</li>
-					</ul>
-				</div>
-
-				<div class="section report-template-card">
-					<h2 class="section-title">Template Text Report</h2>
-					<p class="muted">Klik tombol untuk copy template report otomatis berdasarkan data report saat ini.</p>
-					<div class="report-template-actions">
-						<button id="copyLinehaulReportBtn" type="button" class="report-template-btn">Linehaul Report</button>
-						<button id="copyBulkyReportBtn" type="button" class="report-template-btn">Bulky Report</button>
-						<button id="copyHourlyReportBtn" type="button" class="report-template-btn">Hourly Report</button>
+					<div class="section report-template-card">
+						<h2 class="section-title">Template Text Report</h2>
+						<p class="muted">Klik tombol untuk copy template report otomatis berdasarkan data report saat ini.</p>
+						<div class="report-template-actions">
+							<button id="copyLinehaulReportBtn" type="button" class="report-template-btn">Linehaul Report</button>
+							<button id="copyBulkyReportBtn" type="button" class="report-template-btn">Bulky Report</button>
+							<button id="copyHourlyReportBtn" type="button" class="report-template-btn">Hourly Report</button>
+						</div>
 					</div>
 				</div>
 			</section>
@@ -297,7 +300,7 @@
 				<h3>Email Preview</h3>
 				<div class="email-preview">
 					<p><b>Subject</b></p>
-					<div id="emailSubject">PRE ALERT - AMH CIPUTAT 4 FM TO DESTINATION - TRIP X (DATE)</div>
+					<div id="emailSubject">PRE ALERT - AMH CIPUTAT 4 FM TO DESTINATION - TRIP X DATE</div>
 					<br />
 					<p><b>Body</b></p>
 					<div id="emailBody">
@@ -315,6 +318,20 @@
 				<button id="downloadPrealertReportBtn" class="btn-secondary" type="button">Download Report</button>
 			</div>
 		</div>
+
+		<div id="hourlyPage" class="page hourly-page">
+			<div class="hourly-maintenance-card" role="status" aria-live="polite">
+				<p class="maintenance-notice">Halaman ini sedang dalam proses pengembangan.</p>
+			</div>
+		</div>
+	</div>
+
+	<div id="floatingMenu" class="floating-menu">
+		<div id="floatingMenuDropdown" class="floating-menu-dropdown" aria-hidden="true">
+			<button id="generateEmailFab" type="button" class="floating-menu-item" aria-label="Generate Email">✉️ Generate Email</button>
+			<button id="generateAllBtn" type="button" class="floating-menu-item" aria-label="Generate All Reports">⚡ Generate All Reports</button>
+		</div>
+		<button id="floatingMenuToggle" type="button" class="floating-menu-toggle" aria-label="Open floating menu" aria-expanded="false">⚙️</button>
 	</div>
 
 	<div id="massUploadModal" class="peek-backdrop" aria-hidden="true">
@@ -372,6 +389,8 @@
 			</div>
 		</div>
 	</div>
+
+	<footer class="app-footer">Copyright by AMH Ciputat 4 Hub</footer>
 
 	<div id="toast" class="toast" role="status" aria-live="polite"></div>
 	<script src="app.js" defer></script>

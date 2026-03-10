@@ -182,6 +182,11 @@ const copyBulkyReportBtn = document.getElementById('copyBulkyReportBtn');
 const copyHourlyReportBtn = document.getElementById('copyHourlyReportBtn');
 const generateTOBtn = document.getElementById('generateTOBtn');
 const generateAllBtn = document.getElementById('generateAllBtn');
+const generateAllInlineBtn = document.getElementById('generateAllInlineBtn');
+const generateEmailFab = document.getElementById('generateEmailFab');
+const floatingMenu = document.getElementById('floatingMenu');
+const floatingMenuToggle = document.getElementById('floatingMenuToggle');
+const floatingMenuDropdown = document.getElementById('floatingMenuDropdown');
 const totalDataEl = document.getElementById('totalData');
 const filteredDataEl = document.getElementById('filteredData');
 const previewHeadLeft = document.getElementById('previewHeadLeft');
@@ -1134,7 +1139,7 @@ function buildPrealertSubject() {
 	const slotTripNumber = getSlotTripNumber(slot);
 	const formattedDate = getIndonesianReportDate().replaceAll('-', ' ');
 
-	return `PRE ALERT - AMH CIPUTAT 4 FM TO ${subjectDestination} - TRIP ${slotTripNumber} - (${formattedDate})`;
+	return `PRE ALERT - AMH CIPUTAT 4 FM TO ${subjectDestination} - TRIP ${slotTripNumber} - ${formattedDate}`;
 }
 
 function buildPrealertBody() {
@@ -3258,6 +3263,7 @@ async function generateAllReports() {
 	resetMessages();
 	clearWarning();
 	setButtonLoading(generateAllBtn, true, 'Generating Reports...');
+	setButtonLoading(generateAllInlineBtn, true, 'Generating Reports...');
 	showProcessingToast([
 		'Filtering dataset',
 		'Generating Mass Upload file',
@@ -3296,6 +3302,7 @@ async function generateAllReports() {
 		showReportErrorToast();
 	} finally {
 		setButtonLoading(generateAllBtn, false);
+		setButtonLoading(generateAllInlineBtn, false);
 	}
 }
 
@@ -3379,6 +3386,22 @@ function init() {
 	setPrealertUploadState('idle', 0, 'Ready', 'Pilih file untuk mulai parsing.');
 	syncPrealertTripFromReportSlot();
 	updatePrealertEmailPreview();
+	const setFloatingMenuOpen = (isOpen) => {
+		if (!floatingMenu || !floatingMenuToggle || !floatingMenuDropdown) {
+			return;
+		}
+
+		floatingMenu.classList.toggle('open', isOpen);
+		floatingMenuToggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+		floatingMenuDropdown.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
+	};
+
+	if (floatingMenuToggle) {
+		floatingMenuToggle.addEventListener('click', () => {
+			const isOpen = floatingMenu?.classList.contains('open');
+			setFloatingMenuOpen(!isOpen);
+		});
+	}
 
 	document.querySelectorAll('.tab').forEach((tab) => {
 		tab.addEventListener('click', () => {
@@ -3395,6 +3418,10 @@ function init() {
 
 			if (target === 'prealert') {
 				document.getElementById('prealertPage')?.classList.add('active');
+			}
+
+			if (target === 'hourly') {
+				document.getElementById('hourlyPage')?.classList.add('active');
 			}
 		});
 	});
@@ -3470,6 +3497,9 @@ function init() {
 		}
 		if (!tripCombobox.contains(event.target)) {
 			closeTripDropdown();
+		}
+		if (floatingMenu && !floatingMenu.contains(event.target)) {
+			setFloatingMenuOpen(false);
 		}
 	});
 
@@ -3598,6 +3628,11 @@ function init() {
 	});
 
 	document.addEventListener('keydown', (event) => {
+		if (event.key === 'Escape' && floatingMenu?.classList.contains('open')) {
+			setFloatingMenuOpen(false);
+			return;
+		}
+
 		if (event.key === 'Escape' && notificationLogOverlay.classList.contains('open')) {
 			closeNotificationLog();
 			return;
@@ -3678,6 +3713,14 @@ function init() {
 	});
 
 	generateAllBtn.addEventListener('click', generateAllReports);
+	generateAllInlineBtn?.addEventListener('click', generateAllReports);
+	generateEmailFab?.addEventListener('click', () => {
+		setFloatingMenuOpen(false);
+		generateGmailDraft();
+	});
+	generateAllBtn.addEventListener('click', () => {
+		setFloatingMenuOpen(false);
+	});
 	notificationLogBtn.addEventListener('click', openNotificationLog);
 	notificationLogCloseBtn.addEventListener('click', closeNotificationLog);
 	notificationLogClearBtn.addEventListener('click', clearNotificationLog);
