@@ -433,6 +433,37 @@ body .shortcut-hint {
 	color: var(--muted);
 }
 
+.prealert-done-actions {
+	display: none;
+	justify-content: flex-end;
+	margin-top: 10px;
+}
+
+.upload-box[data-upload-state="success"] ~ .prealert-done-actions {
+	display: flex;
+}
+
+.prealert-done-actions .btn-secondary {
+	min-width: 150px;
+	padding: 8px 12px;
+	font-size: 12px;
+	border-radius: 9px;
+	background: linear-gradient(135deg, #ff6a00, #ff8c3a);
+	color: #ffffff;
+	border: 1px solid #e85d00;
+	box-shadow: 0 6px 16px rgba(255, 106, 0, 0.28);
+}
+
+.prealert-done-actions .btn-secondary:hover {
+	background: linear-gradient(135deg, #ff5b00, #ff7a24);
+}
+
+body.dark-mode .prealert-done-actions .btn-secondary {
+	background: linear-gradient(135deg, #ff7a1a, #ff9b52);
+	color: #0f172a;
+	border-color: #ff8f3d;
+}
+
 .report-table {
 	width: 100%;
 	border-collapse: collapse;
@@ -2964,6 +2995,11 @@ body.dark-mode .notification-log-details {
 	.btn-secondary {
 		width: 100%;
 		min-width: 0;
+	}
+
+	.prealert-done-actions .btn-secondary {
+		width: auto;
+		min-width: 130px;
 	}
 
 	.container,

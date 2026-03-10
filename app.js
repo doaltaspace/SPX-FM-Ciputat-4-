@@ -14,6 +14,7 @@ let toolSwitchTimer = null;
 let notificationAudioContext = null;
 let lastNotificationSoundAt = 0;
 let notificationLogEntries = [];
+let prealertUploadedPdfFile = null;
 const modalCloseTimers = new WeakMap();
 
 // API endpoint for automatic draft creation (host your backend service URL here).
@@ -211,6 +212,7 @@ const emailSubjectEl = document.getElementById('emailSubject');
 const emailBodyEl = document.getElementById('emailBody');
 const generateGmailDraftBtn = document.getElementById('generateGmailDraftBtn');
 const downloadPrealertReportBtn = document.getElementById('downloadPrealertReportBtn');
+const downloadPrealertFirstPageJpgBtn = document.getElementById('downloadPrealertFirstPageJpgBtn');
 const driverNameEl = document.getElementById('driverName');
 const plateNumberEl = document.getElementById('plateNumber');
 const destinationEl = document.getElementById('destination');
@@ -1543,6 +1545,99 @@ function downloadPrealertReport() {
 	setSuccess('Report Pre-Alert berhasil diunduh.');
 }
 
+function sanitizeFileNamePart(value, fallback = '-') {
+	const normalized = normalize(value) || fallback;
+	const safe = normalized
+		.replace(/[\\/:*?"<>|]/g, ' ')
+		.replace(/\s+/g, ' ')
+		.trim();
+
+	return safe || fallback;
+}
+
+function buildPrealertFirstPageJpgFilename() {
+	const slotNumber = getSlotTripNumber(slotSelect?.value);
+	const plate = getTextValue(plateNumberEl);
+	const reportDate = getSelectedReportDateFormatted() || formatDateDDMMYYYY(getTodayInputDate()) || '-';
+
+	const safeSlot = sanitizeFileNamePart(slotNumber, '-');
+	const safePlate = sanitizeFileNamePart(plate, '-');
+	const safeDate = sanitizeFileNamePart(reportDate, '-');
+
+	return `Surat Jalan Slot ${safeSlot} - ${safePlate} - Ciputat 4 First Mile to Transit Point Depok DC - ${safeDate}.jpg`;
+}
+
+async function downloadPrealertFirstPageJpg() {
+	const selectedFile = prealertUploadedPdfFile || prealertPdfInput?.files?.[0];
+	if (!selectedFile) {
+		setWarning('Upload PDF terlebih dahulu sebelum download JPG halaman 1.');
+		return;
+	}
+
+	if (!isPdfFile(selectedFile)) {
+		setWarning('File yang dipilih bukan PDF. Silakan upload PDF terlebih dahulu.');
+		return;
+	}
+
+	if (typeof pdfjsLib === 'undefined' || !pdfjsLib?.getDocument) {
+		setError('PDF.js belum tersedia, tidak bisa membuat JPG dari PDF.');
+		return;
+	}
+
+	setButtonLoading(downloadPrealertFirstPageJpgBtn, true, 'Rendering JPG...');
+	try {
+		if (pdfjsLib.GlobalWorkerOptions) {
+			pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+		}
+
+		const buffer = await selectedFile.arrayBuffer();
+		const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+		const targetPageNumber = 2;
+		if (pdf.numPages < targetPageNumber) {
+			throw new Error(`PDF hanya memiliki ${pdf.numPages} halaman. Tidak ada halaman 2.`);
+		}
+
+		const page = await pdf.getPage(targetPageNumber);
+		const viewport = page.getViewport({ scale: 2 });
+		const canvas = document.createElement('canvas');
+		const context = canvas.getContext('2d', { alpha: false });
+
+		canvas.width = Math.max(1, Math.floor(viewport.width));
+		canvas.height = Math.max(1, Math.floor(viewport.height));
+
+		if (!context) {
+			throw new Error('Canvas context tidak tersedia.');
+		}
+
+		await page.render({ canvasContext: context, viewport }).promise;
+
+		const jpgBlob = await new Promise((resolve, reject) => {
+			canvas.toBlob((blob) => {
+				if (!blob) {
+					reject(new Error('Gagal membuat file JPG.'));
+					return;
+				}
+				resolve(blob);
+			}, 'image/jpeg', 0.92);
+		});
+
+		const objectUrl = URL.createObjectURL(jpgBlob);
+		const anchor = document.createElement('a');
+		anchor.href = objectUrl;
+		anchor.download = buildPrealertFirstPageJpgFilename();
+		document.body.appendChild(anchor);
+		anchor.click();
+		anchor.remove();
+		URL.revokeObjectURL(objectUrl);
+
+		setSuccess('JPG halaman 2 berhasil diunduh.');
+	} catch (error) {
+		setError(`Gagal membuat JPG halaman 2: ${error.message}`);
+	} finally {
+		setButtonLoading(downloadPrealertFirstPageJpgBtn, false);
+	}
+}
+
 function readMatch(text, patterns) {
 	for (const pattern of patterns) {
 		const match = text.match(pattern);
@@ -1909,6 +2004,7 @@ async function parsePDF(file, onProgress) {
 
 async function handlePrealertPdfUpload(file) {
 	if (!file) {
+		prealertUploadedPdfFile = null;
 		setPrealertUploadInfo('Belum ada file PDF dipilih.', 'info');
 		setPrealertUploadState('idle', 0, 'Ready', 'Pilih file untuk mulai parsing.');
 		resetPrealertExtractionTable();
@@ -1916,6 +2012,7 @@ async function handlePrealertPdfUpload(file) {
 	}
 
 	if (!isPdfFile(file)) {
+		prealertUploadedPdfFile = null;
 		if (prealertPdfInput) {
 			prealertPdfInput.value = '';
 		}
@@ -1928,6 +2025,7 @@ async function handlePrealertPdfUpload(file) {
 
 	setPrealertUploadState('uploading', 10, 'Uploading', `File terdeteksi: ${file.name}`);
 	setPrealertUploadInfo(`Membaca PDF: ${file.name}`, 'info');
+	prealertUploadedPdfFile = file;
 
 	try {
 		console.log('PDF uploaded:', file.name);
@@ -3225,6 +3323,10 @@ function init() {
 
 	downloadPrealertReportBtn?.addEventListener('click', () => {
 		downloadPrealertReport();
+	});
+
+	downloadPrealertFirstPageJpgBtn?.addEventListener('click', () => {
+		downloadPrealertFirstPageJpg();
 	});
 
 	tabMassUpload.addEventListener('click', () => setActiveTool('mass'));
