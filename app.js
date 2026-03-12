@@ -1059,6 +1059,47 @@ function getIndonesianReportDate() {
 	return `${day}-${monthLabel}-${year}`;
 }
 
+function getIndonesianReportDateWithDayUppercase() {
+	const rawDate = normalize(reportDateInput?.value);
+	if (!/^\d{4}-\d{2}-\d{2}$/.test(rawDate)) {
+		return '-';
+	}
+
+	const [year, month, day] = rawDate.split('-');
+	const dayNames = [
+		'MINGGU',
+		'SENIN',
+		'SELASA',
+		'RABU',
+		'KAMIS',
+		'JUMAT',
+		'SABTU'
+	];
+	const monthNames = [
+		'JANUARI',
+		'FEBRUARI',
+		'MARET',
+		'APRIL',
+		'MEI',
+		'JUNI',
+		'JULI',
+		'AGUSTUS',
+		'SEPTEMBER',
+		'OKTOBER',
+		'NOVEMBER',
+		'DESEMBER'
+	];
+
+	const monthNumber = Number.parseInt(month, 10);
+	const dayNumber = Number.parseInt(day, 10);
+	const yearNumber = Number.parseInt(year, 10);
+	const dateObject = new Date(yearNumber, monthNumber - 1, dayNumber);
+	const dayLabel = dayNames[dateObject.getDay()] || '-';
+	const monthLabel = monthNames[monthNumber - 1] || month;
+
+	return `${dayLabel}, ${day} ${monthLabel} ${year}`;
+}
+
 function getLinehaulQtyFromReportData() {
 	const candidates = [
 		getTextValue(orderQtyEl),
@@ -1077,12 +1118,13 @@ function getLinehaulQtyFromReportData() {
 
 function buildLinehaulReportTemplateText() {
 	const { slot } = getReportSelectionContext();
+	const slotNumber = getSlotTripNumber(slot);
 	const qty = getLinehaulQtyFromReportData();
 
 	return [
 		'Ciputat 4 First Mile Hub',
 		'',
-		`   1. Slot = ${slot}`,
+		`   1. Slot = ${slotNumber}`,
 		`   2. Qty = ${qty}`,
 		'',
 		'Terima-kasih'
@@ -1091,8 +1133,9 @@ function buildLinehaulReportTemplateText() {
 
 function buildBulkyReportTemplateText() {
 	const { slot } = getReportSelectionContext();
-	const dateLabel = getIndonesianReportDate().replaceAll('-', ' ');
-	return `Bulky Slot ${slot} - ${dateLabel}`;
+	const slotNumber = getSlotTripNumber(slot);
+	const dateLabel = getIndonesianReportDateWithDayUppercase();
+	return `MASSUPLOAD BULKY SLOT ${slotNumber}\n${dateLabel}`;
 }
 
 function buildHourlyReportTemplateText() {
