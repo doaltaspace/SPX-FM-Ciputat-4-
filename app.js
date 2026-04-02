@@ -623,7 +623,7 @@ function showToast(messageOrConfig, type = 'success') {
 	const isProcessing = toastType === 'processing';
 	const icon = isProcessing
 		? '<span class="toast-spinner" aria-hidden="true"></span>'
-		: `<span class="toast-icon" aria-hidden="true">${escapeHtml(config.icon || (toastType === 'error' ? '✖' : '✔'))}</span>`;
+		: `<span class="toast-icon" aria-hidden="true">${escapeHtml(config.icon || (toastType === 'error' ? '\u2716' : '\u2714'))}</span>`;
 
 	addNotificationLogEntry({
 		type: toastType,
@@ -640,7 +640,7 @@ function showToast(messageOrConfig, type = 'success') {
 		<div class="toast-card">
 			<div class="toast-head">
 				<div class="toast-head-left">${icon}<strong>${escapeHtml(title)}</strong></div>
-				<button type="button" class="toast-close" aria-label="Close notification">✕</button>
+				<button type="button" class="toast-close" aria-label="Close notification"><svg width="14" height="14" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="rgba(0,0,0,0.08)" stroke="currentColor" stroke-width="2"/><path d="M15 9L9 15M9 9l6 6" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg></button>
 			</div>
 			${message ? `<div class="toast-message">${escapeHtml(message)}</div>` : ''}
 			${detailsHtml}
@@ -675,7 +675,7 @@ function showReportSuccessToast(messages) {
 		title: 'Report Generated Successfully',
 		message: messages.join(' • '),
 		duration: 4000,
-		icon: '✔'
+		icon: '\u2714'
 	});
 }
 
@@ -685,7 +685,7 @@ function showReportErrorToast() {
 		title: 'Report Generation Failed',
 		message: 'Something went wrong while generating the report.',
 		duration: 4000,
-		icon: '✖'
+		icon: '\u2716'
 	});
 }
 
@@ -695,7 +695,7 @@ function showWarningToast(message) {
 		title: 'Warning',
 		message,
 		duration: 4000,
-		icon: '⚠'
+		icon: '\u26A0'
 	});
 }
 
@@ -973,13 +973,13 @@ function setPrealertUploadState(state = 'idle', progress = 0, stageText = 'Ready
 
 	if (prealertUploadStateIcon) {
 		if (state === 'success') {
-			prealertUploadStateIcon.textContent = '✅';
+			prealertUploadStateIcon.innerHTML = '<svg width="22" height="22" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#C8E6C9" stroke="#2D2D2D" stroke-width="2.2"/><polyline points="8 12.5 11 15.5 16.5 9" fill="none" stroke="#2D2D2D" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 		} else if (state === 'error') {
-			prealertUploadStateIcon.textContent = '⚠️';
+			prealertUploadStateIcon.innerHTML = '<svg width="22" height="22" viewBox="0 0 24 24"><path d="M12 2L1.5 20h21z" fill="#FFF9C4" stroke="#2D2D2D" stroke-width="2.2" stroke-linejoin="round"/><line x1="12" y1="9" x2="12" y2="14" stroke="#E74C3C" stroke-width="2.6" stroke-linecap="round"/><circle cx="12" cy="17" r="1.2" fill="#E74C3C"/></svg>';
 		} else if (state === 'uploading' || state === 'parsing') {
-			prealertUploadStateIcon.textContent = '⏳';
+			prealertUploadStateIcon.innerHTML = '<svg class="spin-icon" width="22" height="22" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="#FFE0B2" stroke-width="3"/><path d="M12 3a9 9 0 0 1 9 9" fill="none" stroke="#FF6A00" stroke-width="3" stroke-linecap="round"/></svg>';
 		} else {
-			prealertUploadStateIcon.textContent = '📄';
+			prealertUploadStateIcon.innerHTML = '<svg width="22" height="22" viewBox="0 0 24 24"><path d="M14 2H7a3 3 0 0 0-3 3v14a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3V8z" fill="#FFF3E0" stroke="#2D2D2D" stroke-width="2" stroke-linejoin="round"/><path d="M14 2v6a2 2 0 0 0 2 2h4" fill="#FFD966" stroke="#2D2D2D" stroke-width="1.8" stroke-linejoin="round"/></svg>';
 		}
 	}
 }
@@ -1182,7 +1182,7 @@ function buildPrealertSubject() {
 	const slotTripNumber = getSlotTripNumber(slot);
 	const formattedDate = getIndonesianReportDate().replaceAll('-', ' ');
 
-	return `PRE ALERT - AMH CIPUTAT 4 FM TO ${subjectDestination} - TRIP ${slotTripNumber} - ${formattedDate}`;
+	return `PRE ALERT - AMH CIPUTAT 4 FIRST MILE TO ${subjectDestination} - TRIP ${slotTripNumber} - ${formattedDate}`;
 }
 
 function buildPrealertBody() {
@@ -1213,8 +1213,8 @@ function buildPrealertBody() {
 	const htmlRows = rows
 		.map(([label, value]) => `
 			<tr>
-				<td style="border:1px solid #111827;padding:8px 10px;font-size:13px;font-weight:600;background:#f8fafc;width:46%;vertical-align:top;">${escapeHtml(label)}</td>
-				<td style="border:1px solid #111827;padding:8px 10px;font-size:13px;color:#0f172a;vertical-align:top;">${escapeHtml(value)}</td>
+				<td style="border:1px solid #d1d5db;padding:8px 10px;font-size:13px;font-weight:600;background:#f8fafc;width:40%;vertical-align:top;">${escapeHtml(label)}</td>
+				<td style="border:1px solid #d1d5db;padding:8px 10px;font-size:13px;color:#0f172a;vertical-align:top;">${escapeHtml(value)}</td>
 			</tr>
 		`)
 		.join('');
@@ -1223,10 +1223,10 @@ function buildPrealertBody() {
 		<div style="font-family:Segoe UI,Arial,sans-serif;font-size:14px;line-height:1.55;color:#0f172a;max-width:620px;">
 			<p style="margin:0 0 10px;">Dear All</p>
 			<p style="margin:0 0 12px;">Berikut Terlampir Surat Jalan From Ciputat 4 AMH To ${escapeHtml(destination)}</p>
-			<table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;max-width:560px;border-collapse:collapse;margin:8px 0 12px;background:#ffffff;">
+			<table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;max-width:560px;border-collapse:collapse;margin:8px 0 12px;background:#ffffff;border:1px solid #d1d5db;">
 				<thead>
 					<tr>
-						<th colspan="2" style="border:1px solid #111827;padding:9px 10px;background:#8dc63f;color:#0f172a;text-align:center;font-size:14px;font-weight:800;letter-spacing:0.2px;">CIPUTAT 4 FM</th>
+						<th colspan="2" style="border:1px solid #d1d5db;padding:10px 12px;background:#8dc63f;color:#ffffff;text-align:center;font-size:14px;font-weight:700;letter-spacing:0.04em;">CIPUTAT 4 FIRST MILE</th>
 					</tr>
 				</thead>
 				<tbody>
@@ -1238,12 +1238,40 @@ function buildPrealertBody() {
 		</div>
 	`;
 
+	const previewHtmlRows = rows
+		.map(([label, value]) => `
+			<tr>
+				<td style="border:2px solid #2D2D2D;padding:9px 12px;font-size:13px;font-weight:700;background:#8dc63f;color:#2D2D2D;width:40%;vertical-align:top;text-transform:uppercase;letter-spacing:0.02em;">${escapeHtml(label)}</td>
+				<td style="border:2px solid #2D2D2D;padding:9px 12px;font-size:13px;color:#2D2D2D;vertical-align:top;background:#e8f5d9;">${escapeHtml(value)}</td>
+			</tr>
+		`)
+		.join('');
+
+	const previewHtml = `
+		<div style="font-family:Fredoka,Segoe UI,Arial,sans-serif;font-size:14px;line-height:1.55;color:#2D2D2D;max-width:620px;">
+			<p style="margin:0 0 10px;">Dear All</p>
+			<p style="margin:0 0 12px;">Berikut Terlampir Surat Jalan From Ciputat 4 AMH To ${escapeHtml(destination)}</p>
+			<table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;max-width:560px;border-collapse:collapse;margin:8px 0 12px;background:#ffffff;border:2.5px solid #2D2D2D;border-radius:14px;overflow:hidden;box-shadow:4px 4px 0 #2D2D2D;">
+				<thead>
+					<tr>
+						<th colspan="2" style="border:2px solid #2D2D2D;padding:10px 12px;background:#5a9e2f;color:#ffffff;text-align:center;font-size:15px;font-weight:800;letter-spacing:0.06em;text-transform:uppercase;text-shadow:1px 1px 0 rgba(0,0,0,0.15);">CIPUTAT 4 FIRST MILE</th>
+					</tr>
+				</thead>
+				<tbody>
+					${previewHtmlRows}
+				</tbody>
+			</table>
+			<p style="margin:0 0 10px;font-size:12px;line-height:1.55;color:#5A5A5A;"><b>Noted:</b> Apabila dalam waktu 3 jam setelah shipment tiba tidak terdapat feedback dari pihak penerima, maka seluruh tanggung jawab terkait paket dianggap telah diterima oleh next station.</p>
+			<p style="margin:0;">Terima-kasih</p>
+		</div>
+	`;
+
 	const text = [
 		'Dear All',
 		'',
 		`Berikut Terlampir Surat Jalan From Ciputat 4 AMH To ${destination}`,
 		'',
-		'=== CIPUTAT 4 FM ===',
+		'=== CIPUTAT 4 FIRST MILE ===',
 		...rows.map(([label, value]) => `${label}: ${value}`),
 		'',
 		'Noted: Apabila dalam waktu 3 jam setelah shipment tiba tidak terdapat feedback dari pihak penerima, maka seluruh tanggung jawab terkait paket dianggap telah diterima oleh next station.',
@@ -1253,6 +1281,7 @@ function buildPrealertBody() {
 
 	return {
 		html,
+		previewHtml,
 		text,
 		reportDate,
 		slot
@@ -1265,7 +1294,7 @@ function updatePrealertEmailPreview() {
 	}
 
 	if (emailBodyEl) {
-		emailBodyEl.innerHTML = buildPrealertBody().html;
+		emailBodyEl.innerHTML = buildPrealertBody().previewHtml;
 	}
 }
 
@@ -2232,7 +2261,7 @@ function setMassUploadStatus(message, tone = 'info') {
 function applyTheme(theme) {
 	const isDark = theme === 'dark';
 	document.body.classList.toggle('dark-mode', isDark);
-	themeToggle.textContent = isDark ? '☀️' : '🌙';
+	themeToggle.innerHTML = isDark ? '<svg class="icon-theme" width="20" height="20" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5" fill="#FFD966" stroke="#2D2D2D" stroke-width="2.2"/><line x1="12" y1="1" x2="12" y2="4" stroke="#FFD966" stroke-width="2.6" stroke-linecap="round"/><line x1="12" y1="20" x2="12" y2="23" stroke="#FFD966" stroke-width="2.6" stroke-linecap="round"/><line x1="4.2" y1="4.2" x2="6.3" y2="6.3" stroke="#FFD966" stroke-width="2.4" stroke-linecap="round"/><line x1="17.7" y1="17.7" x2="19.8" y2="19.8" stroke="#FFD966" stroke-width="2.4" stroke-linecap="round"/><line x1="1" y1="12" x2="4" y2="12" stroke="#FFD966" stroke-width="2.6" stroke-linecap="round"/><line x1="20" y1="12" x2="23" y2="12" stroke="#FFD966" stroke-width="2.6" stroke-linecap="round"/><line x1="4.2" y1="19.8" x2="6.3" y2="17.7" stroke="#FFD966" stroke-width="2.4" stroke-linecap="round"/><line x1="17.7" y1="6.3" x2="19.8" y2="4.2" stroke="#FFD966" stroke-width="2.4" stroke-linecap="round"/></svg>' : '<svg class="icon-theme" width="20" height="20" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79z" fill="#FFD966" stroke="#2D2D2D" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="9" cy="10" r="1" fill="#2D2D2D"/><circle cx="14" cy="9" r="0.7" fill="#2D2D2D"/></svg>';
 }
 
 function initTheme() {
@@ -2527,7 +2556,7 @@ function renderSelectedOperatorTags() {
 		const removeBtn = document.createElement('button');
 		removeBtn.type = 'button';
 		removeBtn.className = 'tag-remove';
-		removeBtn.textContent = '✕';
+		removeBtn.innerHTML = '<svg width="11" height="11" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="rgba(0,0,0,0.1)" stroke="currentColor" stroke-width="2.2"/><path d="M15 9L9 15M9 9l6 6" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"/></svg>';
 		removeBtn.addEventListener('click', () => {
 			selectedOperators = selectedOperators.filter((item) => item !== operator);
 			renderSelectedOperatorTags();
