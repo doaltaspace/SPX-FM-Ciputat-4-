@@ -629,8 +629,46 @@
 		var kijangLogo=document.querySelector('.title-icon');
 		if(!overlayEl)return;
 
+		/* ── Music ── */
+		var music=new Audio('img/welcome.mp3');
+		music.loop=true;
+		music.volume=0;
+		var fadeInterval=null;
+		var FADE_STEP=0.02;
+		var FADE_MS=30;
+		var MAX_VOL=0.6;
+
+		function fadeIn(){
+			clearInterval(fadeInterval);
+			music.volume=0;
+			music.currentTime=0;
+			var p=music.play();
+			if(p&&p.catch) p.catch(function(){});
+			fadeInterval=setInterval(function(){
+				if(music.volume+FADE_STEP>=MAX_VOL){
+					music.volume=MAX_VOL;
+					clearInterval(fadeInterval);
+				}else{
+					music.volume=music.volume+FADE_STEP;
+				}
+			},FADE_MS);
+		}
+
+		function fadeOut(cb){
+			clearInterval(fadeInterval);
+			fadeInterval=setInterval(function(){
+				if(music.volume-FADE_STEP<=0){
+					music.volume=0;
+					music.pause();
+					clearInterval(fadeInterval);
+					if(cb) cb();
+				}else{
+					music.volume=music.volume-FADE_STEP;
+				}
+			},FADE_MS);
+		}
+
 		function showPopup(){
-			/* Re-create overlay if it was removed */
 			var overlay=document.getElementById('welcomePopupOverlay');
 			if(!overlay){
 				overlay=overlayEl.cloneNode(true);
@@ -642,15 +680,17 @@
 			}
 			overlay.classList.remove('is-closing');
 			overlay.style.display='';
+			fadeIn();
 		}
 
 		function hidePopup(){
 			var overlay=document.getElementById('welcomePopupOverlay');
 			if(!overlay)return;
 			overlay.classList.add('is-closing');
-			setTimeout(function(){
-				overlay.remove();
-			},400);
+			fadeOut(function(){
+				var el=document.getElementById('welcomePopupOverlay');
+				if(el) el.remove();
+			});
 		}
 
 		/* OK button on initial popup */
@@ -660,6 +700,9 @@
 		overlayEl.addEventListener('click',function(e){
 			if(e.target===overlayEl) hidePopup();
 		});
+
+		/* Start music on first load */
+		fadeIn();
 
 		/* Click kijang logo to show popup again */
 		if(kijangLogo){
