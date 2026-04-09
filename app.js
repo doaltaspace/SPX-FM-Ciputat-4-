@@ -16,6 +16,14 @@ let lastNotificationSoundAt = 0;
 let notificationLogEntries = [];
 let prealertUploadedPdfFile = null;
 let customErrorAudioElement = null;
+let linehaulTemplateData = {
+	staTime: '-',
+	ataTime: '-',
+	stdTime: '-',
+	stfTime: '-',
+	atdTime: '-',
+	sealCode: '-'
+};
 const modalCloseTimers = new WeakMap();
 // Optional custom error sound file (example: 'sounds/oink.mp3').
 const ERROR_NOTIFICATION_SOUND_URL = 'sounds/error.mp3';
@@ -801,6 +809,17 @@ function normalize(value) {
 	return String(value ?? '').trim();
 }
 
+function resetLinehaulTemplateData() {
+	linehaulTemplateData = {
+		staTime: '-',
+		ataTime: '-',
+		stdTime: '-',
+		stfTime: '-',
+		atdTime: '-',
+		sealCode: '-'
+	};
+}
+
 function formatFileSize(bytes) {
 	if (!bytes) {
 		return '0 B';
@@ -1004,6 +1023,8 @@ function resetPrealertExtractionTable() {
 		}
 	});
 
+	resetLinehaulTemplateData();
+
 	syncPrealertTripFromReportSlot();
 	updatePrealertEmailPreview();
 }
@@ -1096,8 +1117,92 @@ function getIndonesianReportDateWithDayUppercase() {
 	const dateObject = new Date(yearNumber, monthNumber - 1, dayNumber);
 	const dayLabel = dayNames[dateObject.getDay()] || '-';
 	const monthLabel = monthNames[monthNumber - 1] || month;
+	const formattedDay = Number.isFinite(dayNumber) ? String(dayNumber) : day;
+
+	return `${dayLabel} ${formattedDay} ${monthLabel} ${year}`;
+}
+
+function getIndonesianReportDateWithDayTitleCase() {
+	const rawDate = normalize(reportDateInput?.value);
+	if (!/^\d{4}-\d{2}-\d{2}$/.test(rawDate)) {
+		return '-';
+	}
+
+	const [year, month, day] = rawDate.split('-');
+	const dayNames = [
+		'Minggu',
+		'Senin',
+		'Selasa',
+		'Rabu',
+		'Kamis',
+		'Jumat',
+		'Sabtu'
+	];
+	const monthNames = [
+		'Januari',
+		'Februari',
+		'Maret',
+		'April',
+		'Mei',
+		'Juni',
+		'Juli',
+		'Agustus',
+		'September',
+		'Oktober',
+		'November',
+		'Desember'
+	];
+
+	const monthNumber = Number.parseInt(month, 10);
+	const dayNumber = Number.parseInt(day, 10);
+	const yearNumber = Number.parseInt(year, 10);
+	const dateObject = new Date(yearNumber, monthNumber - 1, dayNumber);
+	const dayLabel = dayNames[dateObject.getDay()] || '-';
+	const monthLabel = monthNames[monthNumber - 1] || month;
 
 	return `${dayLabel}, ${day} ${monthLabel} ${year}`;
+}
+
+function getIndonesianReportDateWithDayTitleCaseNatural() {
+	const rawDate = normalize(reportDateInput?.value);
+	if (!/^\d{4}-\d{2}-\d{2}$/.test(rawDate)) {
+		return '-';
+	}
+
+	const [year, month, day] = rawDate.split('-');
+	const dayNames = [
+		'Minggu',
+		'Senin',
+		'Selasa',
+		'Rabu',
+		'Kamis',
+		'Jumat',
+		'Sabtu'
+	];
+	const monthNames = [
+		'Januari',
+		'Februari',
+		'Maret',
+		'April',
+		'Mei',
+		'Juni',
+		'Juli',
+		'Agustus',
+		'September',
+		'Oktober',
+		'November',
+		'Desember'
+	];
+
+	const monthNumber = Number.parseInt(month, 10);
+	const dayNumber = Number.parseInt(day, 10);
+	const yearNumber = Number.parseInt(year, 10);
+	const dateObject = new Date(yearNumber, monthNumber - 1, dayNumber);
+	const dayLabel = dayNames[dateObject.getDay()] || '-';
+	const monthLabel = monthNames[monthNumber - 1] || month;
+	const formattedDay = Number.isFinite(dayNumber) ? String(dayNumber) : day;
+
+	return `${dayLabel}, ${formattedDay} ${monthLabel} ${year}`;
 }
 
 function getLinehaulQtyFromReportData() {
@@ -1116,31 +1221,205 @@ function getLinehaulQtyFromReportData() {
 	return fallback || '-';
 }
 
+function getBulkyQtyFromReportData() {
+	const qty = normalize(filteredDataEl?.textContent);
+	return qty || '0';
+}
+
+function toTitleCaseWords(value) {
+	const safeValue = normalize(value);
+	if (!safeValue || safeValue === '-') {
+		return '-';
+	}
+
+	return safeValue
+		.toLowerCase()
+		.replace(/(^|[\s/-])([a-z])/g, (match, separator, letter) => `${separator}${letter.toUpperCase()}`);
+}
+
+function extractClockTime(value) {
+	const matched = String(value || '').match(/(\d{1,2}):(\d{2})(?::\d{2})?/);
+	if (!matched) {
+		return '-';
+	}
+
+	const hour = Number.parseInt(matched[1], 10);
+	const minute = Number.parseInt(matched[2], 10);
+	if (!Number.isFinite(hour) || !Number.isFinite(minute) || hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+		return '-';
+	}
+
+	return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+}
+
+function extractTimeByLabelFromLines(lines, labelRegex, maxLookAhead = 8) {
+	if (!Array.isArray(lines)) {
+		return '-';
+	}
+
+	const boundaryRegex = /\b(?:Origin|Destination|ATA|STA|STD|STF|ATD|Waktu\s*Segel|Kode\s*Segel|Nama\s*Driver|Nomor\s*Polisi|Nama\s*Vendor|Jumlah\s*TO|#\s*Nomor\s*TO)\b/i;
+
+	for (let index = 0; index < lines.length; index += 1) {
+		const currentLine = normalize(lines[index]);
+		if (!currentLine || !labelRegex.test(currentLine)) {
+			continue;
+		}
+
+		const inlineDetected = extractClockTime(currentLine);
+		if (inlineDetected !== '-') {
+			return inlineDetected;
+		}
+
+		for (let offset = 1; offset <= maxLookAhead && (index + offset) < lines.length; offset += 1) {
+			const nextLine = normalize(lines[index + offset]);
+			if (!nextLine || /^[:\-]+$/.test(nextLine)) {
+				continue;
+			}
+
+			const detected = extractClockTime(nextLine);
+			if (detected !== '-') {
+				return detected;
+			}
+
+			if (offset > 1 && boundaryRegex.test(nextLine) && !labelRegex.test(nextLine)) {
+				break;
+			}
+		}
+	}
+
+	return '-';
+}
+
+function pickPreferredClockValue(values = []) {
+	for (const value of values) {
+		const parsed = extractClockTime(value);
+		if (parsed !== '-') {
+			return parsed;
+		}
+	}
+	return '-';
+}
+
+function parseClockToMinutes(clockValue) {
+	const clock = extractClockTime(clockValue);
+	if (clock === '-') {
+		return null;
+	}
+
+	const [hour, minute] = clock.split(':').map((part) => Number.parseInt(part, 10));
+	if (!Number.isFinite(hour) || !Number.isFinite(minute)) {
+		return null;
+	}
+
+	return hour * 60 + minute;
+}
+
+function formatMinutesAsClock(totalMinutes) {
+	if (!Number.isFinite(totalMinutes)) {
+		return '-';
+	}
+
+	const minutesInDay = 24 * 60;
+	const normalized = ((totalMinutes % minutesInDay) + minutesInDay) % minutesInDay;
+	const hour = Math.floor(normalized / 60);
+	const minute = normalized % 60;
+	return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+}
+
+function shiftClockByMinutes(clockValue, deltaMinutes) {
+	const baseMinutes = parseClockToMinutes(clockValue);
+	if (baseMinutes === null) {
+		return '-';
+	}
+
+	return formatMinutesAsClock(baseMinutes + Number(deltaMinutes || 0));
+}
+
+function formatClockWithEarly(actualClock, compareClock) {
+	const formattedActual = extractClockTime(actualClock);
+	if (formattedActual === '-') {
+		return '-';
+	}
+
+	const actualMinutes = parseClockToMinutes(formattedActual);
+	const compareMinutes = parseClockToMinutes(compareClock);
+	if (actualMinutes === null || compareMinutes === null) {
+		return formattedActual;
+	}
+
+	if (actualMinutes < compareMinutes) {
+		return `${formattedActual} Early`;
+	}
+
+	return formattedActual;
+}
+
+function formatAtdWithEarly(atdClock, compareClock) {
+	return formatClockWithEarly(atdClock, compareClock);
+}
+
 function buildLinehaulReportTemplateText() {
 	const { slot } = getReportSelectionContext();
 	const slotNumber = getSlotTripNumber(slot);
-	const qty = getLinehaulQtyFromReportData();
+	const destination = toTitleCaseWords(getTextValue(destinationEl));
+	const driverName = toTitleCaseWords(getTextValue(driverNameEl));
+	const plateNumber = getTextValue(plateNumberEl);
+	const ltNumber = getTextValue(ltNumberEl);
+	const totalToQty = getTextValue(totalToQtyEl);
+	const orderQty = getTextValue(orderQtyEl);
+	const hvQty = getTextValue(hvQtyEl);
+	const etaTime = shiftClockByMinutes(linehaulTemplateData.staTime, -30);
+	const ataTime = formatClockWithEarly(linehaulTemplateData.ataTime, etaTime);
+	const stdTime = extractClockTime(linehaulTemplateData.stdTime);
+	const atdCompareClock = linehaulTemplateData.stfTime !== '-' ? linehaulTemplateData.stfTime : linehaulTemplateData.stdTime;
+	const atdTime = formatAtdWithEarly(linehaulTemplateData.atdTime, atdCompareClock);
+	const sealCode = normalize(linehaulTemplateData.sealCode || '-').toUpperCase() || '-';
+	const dateLabel = getIndonesianReportDateWithDayTitleCaseNatural();
 
 	return [
-		'Ciputat 4 First Mile Hub',
+		'Daily Report Ciputat 4 First Mile Hub',
+		dateLabel,
 		'',
-		`   1. Slot = ${slotNumber}`,
-		`   2. Qty = ${qty}`,
+		`Slot : ${slotNumber}`,
 		'',
-		'Terima-kasih'
+		`Destination: ${destination}`,
+		`ETA : ${etaTime}`,
+		`ATA : ${ataTime}`,
+		`STD : ${stdTime}`,
+		`ATD : ${atdTime}`,
+		'',
+		`Nama Driver : ${driverName}`,
+		`No Polisi : ${plateNumber}`,
+		`No Seal : ${sealCode}`,
+		`No. Linehaul Trip  : ${ltNumber}`,
+		`Qty Of To : ${totalToQty}`,
+		`Qty Of Parcel : ${orderQty}`,
+		`Hv To Quantity : ${hvQty}`,
+		'',
+		'Terima-Kasih "Good-Luck"'
 	].join('\n');
 }
 
 function buildBulkyReportTemplateText() {
 	const { slot } = getReportSelectionContext();
 	const slotNumber = getSlotTripNumber(slot);
-	const dateLabel = getIndonesianReportDateWithDayUppercase();
-	return `MASSUPLOAD BULKY SLOT ${slotNumber}\n${dateLabel}`;
+	const bulkyQty = getBulkyQtyFromReportData();
+	const dateLabel = getIndonesianReportDateWithDayTitleCase();
+
+	return [
+		'Mass Upload Bulky Ciputat 4 First Mile Hub',
+		`Slot ${slotNumber} : ${bulkyQty}`,
+		dateLabel
+	].join('\n');
 }
 
 function buildHourlyReportTemplateText() {
-	const dateLabel = getIndonesianReportDate().replaceAll('-', ' ');
-	return `HOURLY PERFORMANCE DIALOGUE DASHBOARD CIPUTAT 4 FIRST MILE HUB, TANGGAL ${dateLabel}`;
+	const dateLabel = getIndonesianReportDateWithDayTitleCase();
+	return [
+		'Hourly Performance Dialogue Dashboard',
+		'Ciputat 4 First Mile Hub',
+		dateLabel
+	].join('\n');
 }
 
 async function copyReportTemplateText(templateType) {
@@ -1917,6 +2196,12 @@ function extractLineValue(lines, labelRegex, options = {}) {
 			if (!nextLine || skipRegex.test(nextLine)) {
 				continue;
 			}
+			if (/^[:\-]+$/.test(nextLine)) {
+				continue;
+			}
+			if (/^\d{1,4}[\/.-]\d{1,2}[\/.-]\d{1,4}$/.test(nextLine)) {
+				continue;
+			}
 			return nextLine;
 		}
 	}
@@ -1971,6 +2256,68 @@ function extractLineHaulDataFromLines(lines) {
 	const plateValue = plateRegexMatch?.[1] || extractLineValue(lines, /Nomor\s*Polisi|No\.?\s*Polisi/i, { maxLookAhead: 2 });
 	const destination = extractLineValue(lines, /\bDestination\b/i, { maxLookAhead: 2 });
 	const timeValue = extractLineValue(lines, /Waktu\s*Segel/i, { maxLookAhead: 2 });
+	const staLineValue = extractLineValue(lines, /\bSTA\b|Jadwal\s*Kedatangan/i, {
+		maxLookAhead: 3,
+		skipRegex: /(Surat Jalan|Nama Line Haul Trip|Origin|Kode Segel|Schedule\/Adhoc|Nama Vendor|Notes|PIC Gudang|#\s+Nomor TO|Jmlh|Berat|TO Type|DG Type)/i
+	});
+	const staTimeFromLines = extractTimeByLabelFromLines(lines, /\bSTA\b|Jadwal\s*Kedatangan/i);
+	const ataLineValue = extractLineValue(lines, /\bATA\b|Actual\s*Kedatangan/i, {
+		maxLookAhead: 3,
+		skipRegex: /(Surat Jalan|Nama Line Haul Trip|Origin|Kode Segel|Schedule\/Adhoc|Nama Vendor|Notes|PIC Gudang|#\s+Nomor TO|Jmlh|Berat|TO Type|DG Type)/i
+	});
+	const ataTimeFromLines = extractTimeByLabelFromLines(lines, /\bATA\b|Actual\s*Kedatangan/i);
+	const stdLineValue = extractLineValue(lines, /\bSTD\b|Jadwal\s*Keberangkatan/i, {
+		maxLookAhead: 3,
+		skipRegex: /(Surat Jalan|Nama Line Haul Trip|Origin|Kode Segel|Schedule\/Adhoc|Nama Vendor|Notes|PIC Gudang|#\s+Nomor TO|Jmlh|Berat|TO Type|DG Type)/i
+	});
+	const stdTimeFromLines = extractTimeByLabelFromLines(lines, /\bSTD\b|Jadwal\s*Keberangkatan/i);
+	const stfLineValue = extractLineValue(lines, /\bSTF\b/i, {
+		maxLookAhead: 3,
+		skipRegex: /(Surat Jalan|Nama Line Haul Trip|Origin|Kode Segel|Schedule\/Adhoc|Nama Vendor|Notes|PIC Gudang|#\s+Nomor TO|Jmlh|Berat|TO Type|DG Type)/i
+	});
+	const stfTimeFromLines = extractTimeByLabelFromLines(lines, /\bSTF\b/i);
+
+	const staTime = pickPreferredClockValue([
+		staTimeFromLines,
+		staLineValue,
+		...readAllMatches(compactText, [
+			/(?:\bSTA\b|\bJadwal\s*Kedatangan\b)[\s\S]{0,80}?(\d{1,2}:\d{2}(?::\d{2})?)/i
+		])
+	]);
+	const ataTime = pickPreferredClockValue([
+		ataTimeFromLines,
+		ataLineValue,
+		...readAllMatches(compactText, [
+			/(?:\bATA\b|\bActual\s*Kedatangan\b)[\s\S]{0,80}?(\d{1,2}:\d{2}(?::\d{2})?)/i
+		])
+	]);
+	const stdTime = pickPreferredClockValue([
+		stdTimeFromLines,
+		stdLineValue,
+		...readAllMatches(compactText, [
+			/(?:\bSTD\b|\bJadwal\s*Keberangkatan\b)[\s\S]{0,80}?(\d{1,2}:\d{2}(?::\d{2})?)/i
+		])
+	]);
+	const stfTime = pickPreferredClockValue([
+		stfTimeFromLines,
+		stfLineValue,
+		...readAllMatches(compactText, [
+			/\bSTF\b[\s\S]{0,80}?(\d{1,2}:\d{2}(?::\d{2})?)/i
+		])
+	]);
+	const atdTime = pickPreferredClockValue([
+		extractTimeByLabelFromLines(lines, /Waktu\s*Segel|\bATD\b/i),
+		timeValue,
+		...readAllMatches(compactText, [
+			/\bWaktu\s*Segel\b[^\d]*(?:\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4}\s*)?(\d{1,2}:\d{2}(?::\d{2})?)/i,
+			/\bATD(?:\s*\([^)]*\))?\s*[:\-]?\s*(?:\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4}\s*)?(\d{1,2}:\d{2}(?::\d{2})?)/i
+		])
+	]);
+	const sealCode = normalize(pickLastNonDash(readAllMatches(compactText, [
+		/\bKode\s*Segel\s*[:\-]?\s*([A-Z0-9\-/]{3,})/i,
+		/\bNo\.?\s*Seal\s*[:\-]?\s*([A-Z0-9\-/]{3,})/i,
+		/\bSeal\s*Code\s*[:\-]?\s*([A-Z0-9\-/]{3,})/i
+	]))).toUpperCase() || '-';
 	const ltMatch = textBlock.match(/LT0[A-Z0-9]+/i);
 	const quantity = extractQuantitiesFromLines(lines);
 
@@ -1978,8 +2325,14 @@ function extractLineHaulDataFromLines(lines) {
 		driver: cleanedDriver || '-',
 		plate: plateValue.match(/[A-Z]{1,2}\s*\d{1,4}\s*[A-Z]{0,3}/i)?.[0] || plateValue || '-',
 		destination: destination || '-',
-		time: timeValue.match(/\d{2}:\d{2}:\d{2}/)?.[0] || '-',
+		time: atdTime || '-',
 		ltNumber: ltMatch ? ltMatch[0].toUpperCase() : '-',
+		staTime: staTime || '-',
+		ataTime: ataTime || '-',
+		stdTime: stdTime || '-',
+		stfTime: stfTime || '-',
+		atdTime: atdTime || '-',
+		sealCode: sealCode || '-',
 		hvQty: quantity.hvQty || '-',
 		totalToQty: quantity.totalToQty || '-',
 		orderQty: quantity.orderQty || '-'
@@ -2102,6 +2455,15 @@ function applyExtractedData(data) {
 		return;
 	}
 
+	linehaulTemplateData = {
+		staTime: extractClockTime(data.staTime),
+		ataTime: extractClockTime(data.ataTime),
+		stdTime: extractClockTime(data.stdTime),
+		stfTime: extractClockTime(data.stfTime),
+		atdTime: extractClockTime(data.atdTime || data.time),
+		sealCode: normalize(data.sealCode || '-').toUpperCase() || '-'
+	};
+
 	if (driverNameEl) driverNameEl.textContent = data.driver;
 	if (plateNumberEl) plateNumberEl.textContent = data.plate;
 	if (destinationEl) destinationEl.textContent = data.destination;
@@ -2153,17 +2515,26 @@ async function parsePDF(file, onProgress) {
 	console.log('PDF TEXT:', pdfText);
 	let extracted = null;
 	let bestScore = -1;
+	const candidates = [];
 
 	pages.forEach((lines) => {
 		const candidate = extractLineHaulDataFromLines(lines);
+		candidates.push(candidate);
 		const scoreParts = [
 			candidate.driver !== '-' ? 1 : 0,
 			candidate.plate !== '-' ? 1 : 0,
 			candidate.destination !== '-' ? 1 : 0,
 			candidate.time !== '-' ? 1 : 0,
-			Number.parseInt(candidate.totalToQty, 10) || 0,
-			Number.parseInt(candidate.orderQty, 10) || 0,
-			Number.parseInt(candidate.hvQty, 10) || 0
+			candidate.staTime !== '-' ? 1 : 0,
+			candidate.ataTime !== '-' ? 1 : 0,
+			candidate.stdTime !== '-' ? 1 : 0,
+			candidate.stfTime !== '-' ? 1 : 0,
+			candidate.atdTime !== '-' ? 1 : 0,
+			candidate.sealCode !== '-' ? 1 : 0,
+			candidate.ltNumber !== '-' ? 1 : 0,
+			Number.isFinite(Number.parseInt(candidate.totalToQty, 10)) ? 1 : 0,
+			Number.isFinite(Number.parseInt(candidate.orderQty, 10)) ? 1 : 0,
+			Number.isFinite(Number.parseInt(candidate.hvQty, 10)) ? 1 : 0
 		];
 		const score = scoreParts.reduce((sum, value) => sum + value, 0);
 		if (score > bestScore) {
@@ -2174,6 +2545,34 @@ async function parsePDF(file, onProgress) {
 
 	if (!extracted) {
 		extracted = extractLineHaulDataFromLines(pages.flat());
+		candidates.push(extracted);
+	}
+
+	const mergedExtraction = {
+		driver: extracted.driver || '-',
+		plate: extracted.plate || '-',
+		destination: extracted.destination || '-',
+		time: pickLastNonDash(candidates.map((item) => item.atdTime || item.time || '-')),
+		staTime: pickLastNonDash(candidates.map((item) => item.staTime || '-')),
+		ataTime: pickLastNonDash(candidates.map((item) => item.ataTime || '-')),
+		stdTime: pickLastNonDash(candidates.map((item) => item.stdTime || '-')),
+		stfTime: pickLastNonDash(candidates.map((item) => item.stfTime || '-')),
+		atdTime: pickLastNonDash(candidates.map((item) => item.atdTime || item.time || '-')),
+		sealCode: pickLastNonDash(candidates.map((item) => item.sealCode || '-')),
+		ltNumber: pickLastNonDash(candidates.map((item) => item.ltNumber || '-')),
+		hvQty: pickMaxNumeric(candidates.map((item) => item.hvQty || '-')),
+		totalToQty: pickMaxNumeric(candidates.map((item) => item.totalToQty || '-')),
+		orderQty: pickMaxNumeric(candidates.map((item) => item.orderQty || '-'))
+	};
+
+	if (mergedExtraction.driver === '-') {
+		mergedExtraction.driver = pickLastNonDash(candidates.map((item) => item.driver || '-'));
+	}
+	if (mergedExtraction.plate === '-') {
+		mergedExtraction.plate = pickLastNonDash(candidates.map((item) => item.plate || '-'));
+	}
+	if (mergedExtraction.destination === '-') {
+		mergedExtraction.destination = pickLastNonDash(candidates.map((item) => item.destination || '-'));
 	}
 
 	if (typeof onProgress === 'function') {
@@ -2181,16 +2580,22 @@ async function parsePDF(file, onProgress) {
 	}
 
 	applyExtractedData({
-		driver: extracted.driver || '-',
-		plate: extracted.plate || '-',
-		destination: extracted.destination || '-',
+		driver: mergedExtraction.driver,
+		plate: mergedExtraction.plate,
+		destination: mergedExtraction.destination,
 		trip: getSlotTripNumber(slotSelect?.value),
-		time: extracted.time || '-',
-		ltNumber: extracted.ltNumber || '-',
-		hvQty: extracted.hvQty || '-',
-		totalToQty: extracted.totalToQty || '-',
+		time: mergedExtraction.time,
+		staTime: mergedExtraction.staTime,
+		ataTime: mergedExtraction.ataTime,
+		stdTime: mergedExtraction.stdTime,
+		stfTime: mergedExtraction.stfTime,
+		atdTime: mergedExtraction.atdTime,
+		sealCode: mergedExtraction.sealCode,
+		ltNumber: mergedExtraction.ltNumber,
+		hvQty: mergedExtraction.hvQty,
+		totalToQty: mergedExtraction.totalToQty,
 		liquidationQty: '-',
-		orderQty: extracted.orderQty || '-'
+		orderQty: mergedExtraction.orderQty
 	});
 
 	if (typeof onProgress === 'function') {
