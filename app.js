@@ -1368,7 +1368,8 @@ function buildLinehaulReportTemplateText() {
 	const totalToQty = getTextValue(totalToQtyEl);
 	const orderQty = getTextValue(orderQtyEl);
 	const hvQty = getTextValue(hvQtyEl);
-	const etaTime = shiftClockByMinutes(linehaulTemplateData.staTime, -30);
+	const etaBaseTime = linehaulTemplateData.stdTime !== '-' ? linehaulTemplateData.stdTime : linehaulTemplateData.staTime;
+	const etaTime = shiftClockByMinutes(etaBaseTime, -30);
 	const ataTime = formatClockWithEarly(linehaulTemplateData.ataTime, etaTime);
 	const stdTime = extractClockTime(linehaulTemplateData.stdTime);
 	const atdCompareClock = linehaulTemplateData.stfTime !== '-' ? linehaulTemplateData.stfTime : linehaulTemplateData.stdTime;
