@@ -16,6 +16,8 @@ let lastNotificationSoundAt = 0;
 let notificationLogEntries = [];
 let prealertUploadedPdfFile = null;
 let customErrorAudioElement = null;
+let dbToFiles = [];
+let dbSjFile = null;
 let linehaulTemplateData = {
 	staTime: '-',
 	ataTime: '-',
@@ -170,6 +172,7 @@ const tripDropdown = document.getElementById('tripDropdown');
 const tripHelper = document.getElementById('tripHelper');
 const slotSelect = document.getElementById('slotSelect');
 const reportDateInput = document.getElementById('reportDate');
+const dateDisplayText = document.getElementById('dateDisplayText');
 const reportSummary = document.getElementById('reportSummary');
 const tabMassUpload = document.getElementById('tabMassUpload');
 const tabTOReport = document.getElementById('tabTOReport');
@@ -179,16 +182,14 @@ const operatorInput = document.getElementById('operatorInput');
 const operatorCombobox = document.getElementById('operatorCombobox');
 const operatorDropdown = document.getElementById('operatorDropdown');
 const selectedOperatorTags = document.getElementById('selectedOperatorTags');
-const operatorCountChip = document.getElementById('operatorCountChip');
 const operatorDetectedCount = document.getElementById('operatorDetectedCount');
 const tripDetectedCount = document.getElementById('tripDetectedCount');
-const selectAllOperatorsBtn = document.getElementById('selectAllOperatorsBtn');
-const clearOperatorsBtn = document.getElementById('clearOperatorsBtn');
+
 const copyTrackingBtn = document.getElementById('copyTrackingBtn');
 const copyLinehaulReportBtn = document.getElementById('copyLinehaulReportBtn');
 const copyBulkyReportBtn = document.getElementById('copyBulkyReportBtn');
 const copyHourlyReportBtn = document.getElementById('copyHourlyReportBtn');
-const generateTOBtn = document.getElementById('generateTOBtn');
+
 const generateAllBtn = document.getElementById('generateAllBtn');
 const generateAllInlineBtn = document.getElementById('generateAllInlineBtn');
 const generateEmailFab = document.getElementById('generateEmailFab');
@@ -197,9 +198,7 @@ const floatingMenuToggle = document.getElementById('floatingMenuToggle');
 const floatingMenuDropdown = document.getElementById('floatingMenuDropdown');
 const totalDataEl = document.getElementById('totalData');
 const filteredDataEl = document.getElementById('filteredData');
-const previewHeadLeft = document.getElementById('previewHeadLeft');
-const previewHeadRight = document.getElementById('previewHeadRight');
-const previewBody = document.getElementById('previewBody');
+
 const toStatusSummary = document.getElementById('toStatusSummary');
 const toStatusSummaryBody = document.getElementById('toStatusSummaryBody');
 const viewAllPreviewBtn = document.getElementById('viewAllPreviewBtn');
@@ -249,7 +248,48 @@ const massUploadStatus = document.getElementById('massUploadStatus');
 const fixMassUploadDimensionsBtn = document.getElementById('fixMassUploadDimensionsBtn');
 const applyMassUploadChangesBtn = document.getElementById('applyMassUploadChangesBtn');
 const cancelMassUploadChangesBtn = document.getElementById('cancelMassUploadChangesBtn');
+const hubSelect = document.getElementById('hubSelect');
+const hubCustomInput = document.getElementById('hubCustomInput');
+const hubSelectWrapper = document.getElementById('hubSelectWrapper');
+const headerSubtitle = document.getElementById('headerSubtitle');
 const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/**
+ * Returns the currently selected hub name.
+ * If "Lainnya" is chosen and the user typed a custom name, that name is returned.
+ * Otherwise defaults to "Ciputat 4 First Mile Hub".
+ */
+function getSelectedHubName() {
+	if (!hubSelect) {
+		return 'Ciputat 4 First Mile Hub';
+	}
+
+	if (hubSelect.value === '__custom__') {
+		const custom = normalize(hubCustomInput?.value);
+		return custom || 'First Mile Hub';
+	}
+
+	return hubSelect.value || 'Ciputat 4 First Mile Hub';
+}
+
+/**
+ * Returns an abbreviated hub name suitable for email subjects and short references.
+ * e.g. "Ciputat 4 First Mile Hub" -> "CIPUTAT 4 FIRST MILE"
+ */
+function getHubShortName() {
+	const full = getSelectedHubName();
+	return full.replace(/\s*Hub\s*$/i, '').trim();
+}
+
+/**
+ * Returns the AMH-prefix version: "Ciputat 4 AMH" style.
+ * Extracts hub identifier before "First Mile" if present.
+ */
+function getHubAmhName() {
+	const full = getSelectedHubName();
+	const match = full.match(/^(.+?)\s*First\s*Mile/i);
+	return match ? `${match[1].trim()} AMH` : full.replace(/\s*Hub\s*$/i, '').trim() + ' AMH';
+}
 
 function escapeHtml(value) {
 	return String(value ?? '')
@@ -853,6 +893,7 @@ function updateLoadedMeta(file, rowCount, tripDetected = '') {
 }
 
 function setProgress(stepKey) {
+	if (!progressList) return;
 	Array.from(progressList.querySelectorAll('li')).forEach((item) => {
 		item.classList.remove('active', 'done');
 	});
@@ -870,6 +911,7 @@ function setProgress(stepKey) {
 }
 
 function clearProgress() {
+	if (!progressList) return;
 	Array.from(progressList.querySelectorAll('li')).forEach((item) => {
 		item.classList.remove('active', 'done');
 	});
@@ -1051,6 +1093,18 @@ function syncPrealertTripFromReportSlot() {
 		return;
 	}
 	tripNumberEl.textContent = getSlotTripNumber(slotSelect?.value);
+}
+
+function updateDateDisplay() {
+	if (!dateDisplayText || !reportDateInput) return;
+	const val = reportDateInput.value;
+	if (!val || !/^\d{4}-\d{2}-\d{2}$/.test(val)) {
+		dateDisplayText.textContent = '—';
+		return;
+	}
+	const bulan = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+	const [y, m, d] = val.split('-');
+	dateDisplayText.textContent = `${parseInt(d, 10)} ${bulan[parseInt(m, 10) - 1]} ${y}`;
 }
 
 function getIndonesianReportDate() {
@@ -1378,7 +1432,7 @@ function buildLinehaulReportTemplateText() {
 	const dateLabel = getIndonesianReportDateWithDayTitleCaseNatural();
 
 	return [
-		'Daily Report Ciputat 4 First Mile Hub',
+		`Daily Report ${getSelectedHubName()}`,
 		dateLabel,
 		'',
 		`Slot : ${slotNumber}`,
@@ -1408,7 +1462,7 @@ function buildBulkyReportTemplateText() {
 	const dateLabel = getIndonesianReportDateWithDayTitleCase();
 
 	return [
-		'Mass Upload Bulky Ciputat 4 First Mile Hub',
+		`Mass Upload Bulky ${getSelectedHubName()}`,
 		`Slot ${slotNumber} : ${bulkyQty}`,
 		dateLabel
 	].join('\n');
@@ -1418,7 +1472,7 @@ function buildHourlyReportTemplateText() {
 	const dateLabel = getIndonesianReportDateWithDayTitleCase();
 	return [
 		'Hourly Performance Dialogue Dashboard',
-		'Ciputat 4 First Mile Hub',
+		`${getSelectedHubName()}`,
 		dateLabel
 	].join('\n');
 }
@@ -1462,7 +1516,7 @@ function buildPrealertSubject() {
 	const slotTripNumber = getSlotTripNumber(slot);
 	const formattedDate = getIndonesianReportDate().replaceAll('-', ' ');
 
-	return `PRE ALERT - AMH CIPUTAT 4 FIRST MILE TO ${subjectDestination} - TRIP ${slotTripNumber} - ${formattedDate}`;
+	return `PRE ALERT - AMH ${getHubShortName().toUpperCase()} TO ${subjectDestination} - TRIP ${slotTripNumber} - ${formattedDate}`;
 }
 
 function buildPrealertBody() {
@@ -1501,19 +1555,19 @@ function buildPrealertBody() {
 
 	const html = `
 		<div style="font-family:Segoe UI,Arial,sans-serif;font-size:14px;line-height:1.55;color:#0f172a;max-width:620px;">
-			<p style="margin:0 0 10px;">Dear All</p>
-			<p style="margin:0 0 12px;">Berikut Terlampir Surat Jalan From Ciputat 4 AMH To ${escapeHtml(destination)}</p>
-			<table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;max-width:560px;border-collapse:collapse;margin:8px 0 12px;background:#ffffff;border:1px solid #d1d5db;">
+			<p style="margin:0 0 4px;">Dear All</p>
+			<p style="margin:0 0 10px;">Berikut Terlampir Surat Jalan From ${escapeHtml(getHubAmhName())} To ${escapeHtml(destination)}</p>
+			<table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;max-width:560px;border-collapse:collapse;margin:6px 0 10px;background:#ffffff;border:1px solid #d1d5db;">
 				<thead>
 					<tr>
-						<th colspan="2" style="border:1px solid #d1d5db;padding:10px 12px;background:#8dc63f;color:#ffffff;text-align:center;font-size:14px;font-weight:700;letter-spacing:0.04em;">CIPUTAT 4 FIRST MILE</th>
+						<th colspan="2" style="border:1px solid #d1d5db;padding:10px 12px;background:#8dc63f;color:#ffffff;text-align:center;font-size:14px;font-weight:700;letter-spacing:0.04em;">${escapeHtml(getHubShortName().toUpperCase())}</th>
 					</tr>
 				</thead>
 				<tbody>
 					${htmlRows}
 				</tbody>
 			</table>
-			<p style="margin:0 0 10px;font-size:12px;line-height:1.55;color:#334155;"><b>Noted:</b> Apabila dalam waktu 3 jam setelah shipment tiba tidak terdapat feedback dari pihak penerima, maka seluruh tanggung jawab terkait paket dianggap telah diterima oleh next station.</p>
+			<p style="margin:0 0 6px;font-size:12px;line-height:1.4;color:#334155;"><b>Noted:</b> Apabila dalam waktu 3 jam setelah shipment tiba tidak terdapat feedback dari pihak penerima, maka seluruh tanggung jawab terkait paket dianggap telah diterima oleh next station.</p>
 			<p style="margin:0;">Terima-kasih</p>
 		</div>
 	`;
@@ -1521,27 +1575,27 @@ function buildPrealertBody() {
 	const previewHtmlRows = rows
 		.map(([label, value]) => `
 			<tr>
-				<td style="border:2px solid #2D2D2D;padding:9px 12px;font-size:13px;font-weight:700;background:#8dc63f;color:#2D2D2D;width:40%;vertical-align:top;text-transform:uppercase;letter-spacing:0.02em;">${escapeHtml(label)}</td>
-				<td style="border:2px solid #2D2D2D;padding:9px 12px;font-size:13px;color:#2D2D2D;vertical-align:top;background:#e8f5d9;">${escapeHtml(value)}</td>
+				<td style="border:2px solid #2D2D2D;padding:5px 8px;font-size:13px;font-weight:700;background:#8dc63f;color:#2D2D2D;width:40%;vertical-align:top;text-transform:uppercase;letter-spacing:0.02em;">${escapeHtml(label)}</td>
+				<td style="border:2px solid #2D2D2D;padding:5px 8px;font-size:13px;color:#2D2D2D;vertical-align:top;background:#e8f5d9;">${escapeHtml(value)}</td>
 			</tr>
 		`)
 		.join('');
 
 	const previewHtml = `
-		<div style="font-family:Fredoka,Segoe UI,Arial,sans-serif;font-size:14px;line-height:1.55;color:#2D2D2D;max-width:620px;">
-			<p style="margin:0 0 10px;">Dear All</p>
-			<p style="margin:0 0 12px;">Berikut Terlampir Surat Jalan From Ciputat 4 AMH To ${escapeHtml(destination)}</p>
-			<table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;max-width:560px;border-collapse:collapse;margin:8px 0 12px;background:#ffffff;border:2.5px solid #2D2D2D;border-radius:14px;overflow:hidden;box-shadow:4px 4px 0 #2D2D2D;">
+		<div style="font-family:Fredoka,Segoe UI,Arial,sans-serif;font-size:14px;line-height:1.4;color:#2D2D2D;max-width:620px;">
+			<p style="margin:0 0 4px;">Dear All</p>
+			<p style="margin:0 0 8px;">Berikut Terlampir Surat Jalan From ${escapeHtml(getHubAmhName())} To ${escapeHtml(destination)}</p>
+			<table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;max-width:560px;border-collapse:collapse;margin:6px 0 10px;background:#ffffff;border:2.5px solid #2D2D2D;border-radius:14px;overflow:hidden;box-shadow:4px 4px 0 #2D2D2D;">
 				<thead>
 					<tr>
-						<th colspan="2" style="border:2px solid #2D2D2D;padding:10px 12px;background:#5a9e2f;color:#ffffff;text-align:center;font-size:15px;font-weight:800;letter-spacing:0.06em;text-transform:uppercase;text-shadow:1px 1px 0 rgba(0,0,0,0.15);">CIPUTAT 4 FIRST MILE</th>
+						<th colspan="2" style="border:2px solid #2D2D2D;padding:10px 12px;background:#5a9e2f;color:#ffffff;text-align:center;font-size:15px;font-weight:800;letter-spacing:0.06em;text-transform:uppercase;text-shadow:1px 1px 0 rgba(0,0,0,0.15);">${escapeHtml(getHubShortName().toUpperCase())}</th>
 					</tr>
 				</thead>
 				<tbody>
 					${previewHtmlRows}
 				</tbody>
 			</table>
-			<p style="margin:0 0 10px;font-size:12px;line-height:1.55;color:#5A5A5A;"><b>Noted:</b> Apabila dalam waktu 3 jam setelah shipment tiba tidak terdapat feedback dari pihak penerima, maka seluruh tanggung jawab terkait paket dianggap telah diterima oleh next station.</p>
+			<p style="margin:0 0 6px;font-size:12px;line-height:1.4;color:#5A5A5A;"><b>Noted:</b> Apabila dalam waktu 3 jam setelah shipment tiba tidak terdapat feedback dari pihak penerima, maka seluruh tanggung jawab terkait paket dianggap telah diterima oleh next station.</p>
 			<p style="margin:0;">Terima-kasih</p>
 		</div>
 	`;
@@ -1549,9 +1603,9 @@ function buildPrealertBody() {
 	const text = [
 		'Dear All',
 		'',
-		`Berikut Terlampir Surat Jalan From Ciputat 4 AMH To ${destination}`,
+		`Berikut Terlampir Surat Jalan From ${getHubAmhName()} To ${destination}`,
 		'',
-		'=== CIPUTAT 4 FIRST MILE ===',
+		`=== ${getHubShortName().toUpperCase()} ===`,
 		...rows.map(([label, value]) => `${label}: ${value}`),
 		'',
 		'Noted: Apabila dalam waktu 3 jam setelah shipment tiba tidak terdapat feedback dari pihak penerima, maka seluruh tanggung jawab terkait paket dianggap telah diterima oleh next station.',
@@ -1840,7 +1894,7 @@ async function generateGmailDraft() {
 		subject,
 		htmlBody: body.html,
 		textBody: body.text,
-		source: 'Ciputat 4 First Mile Hub',
+		source: getSelectedHubName(),
 		recipient: recipients.toEmails[0] || undefined,
 		to: recipients.toEmails,
 		cc: recipients.ccEmails,
@@ -2040,13 +2094,13 @@ function buildPrealertFirstPageJpgFilename() {
 	const safePlate = sanitizeFileNamePart(plate, '-');
 	const safeDate = sanitizeFileNamePart(reportDate, '-');
 
-	return `Surat Jalan Slot ${safeSlot} - ${safePlate} - Ciputat 4 First Mile to Transit Point Depok DC - ${safeDate}.jpg`;
+	return `Surat Jalan Slot ${safeSlot} - ${safePlate} - ${getHubShortName()} to Transit Point Depok DC - ${safeDate}.jpg`;
 }
 
 async function downloadPrealertFirstPageJpg() {
 	const selectedFile = prealertUploadedPdfFile || prealertPdfInput?.files?.[0];
 	if (!selectedFile) {
-		setWarning('Upload PDF terlebih dahulu sebelum download JPG halaman 1.');
+		setWarning('Upload PDF terlebih dahulu sebelum download JPG Surat Jalan.');
 		return;
 	}
 
@@ -2068,9 +2122,35 @@ async function downloadPrealertFirstPageJpg() {
 
 		const buffer = await selectedFile.arrayBuffer();
 		const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
-		const targetPageNumber = 2;
-		if (pdf.numPages < targetPageNumber) {
-			throw new Error(`PDF hanya memiliki ${pdf.numPages} halaman. Tidak ada halaman 2.`);
+
+		let targetPageNumber = null;
+		const hubNameForPdf = getSelectedHubName();
+		const hubPdfPattern = new RegExp(hubNameForPdf.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s*'), 'i');
+		for (let i = 1; i <= pdf.numPages; i += 1) {
+			const candidatePage = await pdf.getPage(i);
+			const textContent = await candidatePage.getTextContent();
+			const pageText = textContent.items.map((item) => item.str).join(' ');
+			if (/Origin/i.test(pageText) && hubPdfPattern.test(pageText)) {
+				targetPageNumber = i;
+				break;
+			}
+		}
+
+		// Fallback: try any page with "Origin" if hub-specific match failed
+		if (!targetPageNumber) {
+			for (let i = 1; i <= pdf.numPages; i += 1) {
+				const candidatePage = await pdf.getPage(i);
+				const textContent = await candidatePage.getTextContent();
+				const pageText = textContent.items.map((item) => item.str).join(' ');
+				if (/Origin/i.test(pageText) && /First\s*Mile\s*Hub/i.test(pageText)) {
+					targetPageNumber = i;
+					break;
+				}
+			}
+		}
+
+		if (!targetPageNumber) {
+			throw new Error(`Tidak ditemukan halaman dengan "Origin : ${hubNameForPdf}" di PDF ini.`);
 		}
 
 		const page = await pdf.getPage(targetPageNumber);
@@ -2106,9 +2186,9 @@ async function downloadPrealertFirstPageJpg() {
 		anchor.remove();
 		URL.revokeObjectURL(objectUrl);
 
-		setSuccess('JPG halaman 2 berhasil diunduh.');
+		setSuccess(`JPG halaman ${targetPageNumber} (Origin: ${getSelectedHubName()}) berhasil diunduh.`);
 	} catch (error) {
-		setError(`Gagal membuat JPG halaman 2: ${error.message}`);
+		setError(`Gagal membuat JPG Surat Jalan: ${error.message}`);
 	} finally {
 		setButtonLoading(downloadPrealertFirstPageJpgBtn, false);
 	}
@@ -2476,6 +2556,15 @@ function applyExtractedData(data) {
 	if (liquidationQtyEl) liquidationQtyEl.textContent = data.liquidationQty;
 	if (orderQtyEl) orderQtyEl.textContent = data.orderQty;
 
+	// Auto-set trip input from Surat Jalan LT Number
+	const ltVal = normalize(data.ltNumber);
+	if (ltVal && ltVal !== '-') {
+		tripInput.value = ltVal;
+		tripHelper.textContent = `LT Number dari Surat Jalan: ${ltVal}`;
+		refreshPreview();
+		updateReportSummary();
+	}
+
 	updatePrealertEmailPreview();
 }
 
@@ -2726,13 +2815,27 @@ function updateReportSummary() {
 	const trip = normalize(tripInput.value) || '-';
 	const slot = slotSelect.value || '-';
 	const reportDate = getSelectedReportDateFormatted() || '-';
-	reportSummary.textContent = `Trip: ${trip} | Slot: ${slot} | Report Date: ${reportDate}`;
+	reportSummary.textContent = `LT: ${trip} | Slot: ${slot} | Report Date: ${reportDate}`;
 	syncPrealertTripFromReportSlot();
 	updatePrealertEmailPreview();
 }
 
-function updateOperatorCounter() {
-	operatorCountChip.textContent = `Operator dipilih: ${selectedOperators.length}`;
+function onHubChanged() {
+	const hubName = getSelectedHubName();
+
+	// Update header subtitle
+	if (headerSubtitle) {
+		headerSubtitle.textContent = `Kijang ${hubName.replace(/\s*Hub\s*$/i, '')}`;
+	}
+
+	// Update footer
+	const footer = document.querySelector('.app-footer');
+	if (footer) {
+		footer.textContent = `Copyright by AMH ${hubName.replace(/\s*First\s*Mile\s*Hub\s*$/i, '').trim()} Hub`;
+	}
+
+	// Update email preview
+	updatePrealertEmailPreview();
 }
 
 function updateOperatorDetectedCounter() {
@@ -2823,7 +2926,7 @@ function updateRequiredColumnsWarning(showToastMessage = false) {
 		return;
 	}
 
-	const message = `Missing column in uploaded file: ${missingColumns.join(' / ')}`;
+	const message = `Missing column in uploaded file: ${missingColumns.join(' / ')}. LT Number akan diambil dari Surat Jalan.`;
 	setWarning(message);
 	if (showToastMessage) {
 		showWarningToast(message);
@@ -2835,7 +2938,6 @@ function resetOperatorState() {
 	availableOperators = [];
 	operatorColumnIndex = -1;
 	operatorInput.value = '';
-	updateOperatorCounter();
 	updateOperatorDetectedCounter();
 	renderSelectedOperatorTags();
 	renderOperatorDropdown();
@@ -2893,7 +2995,7 @@ function renderTripDropdown() {
 		const empty = document.createElement('div');
 		empty.className = 'operator-option-empty';
 		empty.textContent = tripColumnIndex === -1
-			? 'Missing column in uploaded file: Line Hual Trip Number'
+			? 'Kolom Trip tidak ditemukan. LT Number dari Surat Jalan digunakan.'
 			: 'Trip tidak ditemukan.';
 		tripDropdown.appendChild(empty);
 		positionTripDropdown();
@@ -2946,13 +3048,7 @@ function closeTripDropdown() {
 
 function renderSelectedOperatorTags() {
 	selectedOperatorTags.innerHTML = '';
-	if (!selectedOperators.length) {
-		const empty = document.createElement('span');
-		empty.className = 'selected-tag-empty';
-		empty.textContent = 'Belum ada operator dipilih.';
-		selectedOperatorTags.appendChild(empty);
-		return;
-	}
+
 
 	selectedOperators.forEach((operator) => {
 		const tag = document.createElement('span');
@@ -2962,12 +3058,11 @@ function renderSelectedOperatorTags() {
 		const removeBtn = document.createElement('button');
 		removeBtn.type = 'button';
 		removeBtn.className = 'tag-remove';
-		removeBtn.innerHTML = '<svg width="11" height="11" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="rgba(0,0,0,0.1)" stroke="currentColor" stroke-width="2.2"/><path d="M15 9L9 15M9 9l6 6" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"/></svg>';
+		removeBtn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11" fill="#FF4D4D" stroke="#2D2D2D" stroke-width="2"/><path d="M15 9L9 15M9 9l6 6" stroke="#2D2D2D" stroke-width="2.5" stroke-linecap="round"/></svg>';
 		removeBtn.addEventListener('click', () => {
 			selectedOperators = selectedOperators.filter((item) => item !== operator);
 			renderSelectedOperatorTags();
 			renderOperatorDropdown();
-			updateOperatorCounter();
 			refreshPreview();
 		});
 
@@ -2993,7 +3088,7 @@ function renderOperatorDropdown() {
 		const empty = document.createElement('div');
 		empty.className = 'operator-option-empty';
 		empty.textContent = operatorColumnIndex === -1
-			? 'Missing column in uploaded file: Operator'
+			? 'File TO Management belum diunggah. Unggah file untuk melanjutkan.'
 			: availableOperators.length
 				? 'Operator tidak ditemukan.'
 				: 'Belum ada operator terdeteksi dari dataset.';
@@ -3012,7 +3107,6 @@ function renderOperatorDropdown() {
 			operatorInput.value = '';
 			renderSelectedOperatorTags();
 			renderOperatorDropdown();
-			updateOperatorCounter();
 			refreshPreview();
 			operatorInput.focus();
 		});
@@ -3342,21 +3436,44 @@ function shuffleDimensions(values) {
 	return shuffled;
 }
 
+function getDimensionRepairReason(item) {
+	const weightNormalized = normalize(item.weight).toUpperCase();
+	if (weightNormalized === 'FIX_ME') {
+		return 'fix_me';
+	}
+	if (
+		normalize(item.weight) === '' ||
+		normalize(item.length) === '' ||
+		normalize(item.width) === '' ||
+		normalize(item.height) === ''
+	) {
+		return 'empty';
+	}
+	return null;
+}
+
 function fixMassUploadDimensions() {
 	if (!massUploadDraftData.length) {
 		showWarningToast('Tidak ada data untuk diperbaiki.');
-		return 0;
+		return { total: 0, fixMeCount: 0, emptyCount: 0 };
 	}
 
-	let repairedCount = 0;
+	let fixMeCount = 0;
+	let emptyCount = 0;
 
 	massUploadDraftData = massUploadDraftData.map((item) => {
-		if (normalize(item.weight).toUpperCase() !== 'FIX_ME') {
+		const reason = getDimensionRepairReason(item);
+		if (!reason) {
 			return item;
 		}
 
+		if (reason === 'fix_me') {
+			fixMeCount += 1;
+		} else {
+			emptyCount += 1;
+		}
+
 		const [lengthValue, widthValue, heightValue] = shuffleDimensions([20, 25, 25]);
-		repairedCount += 1;
 
 		return {
 			...item,
@@ -3367,19 +3484,29 @@ function fixMassUploadDimensions() {
 		};
 	});
 
-	if (!repairedCount) {
-		showWarningToast('Tidak ada baris FIX_ME yang perlu diperbaiki.');
-		return 0;
+	const total = fixMeCount + emptyCount;
+
+	if (!total) {
+		showWarningToast('Tidak ada baris FIX_ME atau kosong yang perlu diperbaiki.');
+		return { total: 0, fixMeCount: 0, emptyCount: 0 };
+	}
+
+	const details = [];
+	if (fixMeCount > 0) {
+		details.push(`${fixMeCount} FIX_ME`);
+	}
+	if (emptyCount > 0) {
+		details.push(`${emptyCount} kosong`);
 	}
 
 	renderMassUploadEditorTable();
 	showToast({
 		type: 'warning',
 		title: 'Dimensions repaired',
-		message: `${repairedCount} rows fixed successfully`
+		message: `${total} rows fixed (${details.join(', ')})`
 	});
 
-	return repairedCount;
+	return { total, fixMeCount, emptyCount };
 }
 
 function createBorderStyle(color = 'D1D5DB') {
@@ -3555,7 +3682,6 @@ function formatPivotWorksheet(worksheet, pivotRows) {
 }
 
 function refreshPreview() {
-	previewBody.innerHTML = '';
 	if (toStatusSummaryBody) {
 		toStatusSummaryBody.innerHTML = '';
 	}
@@ -3567,11 +3693,7 @@ function refreshPreview() {
 		toStatusSummary.classList.remove('hidden');
 	}
 
-	if (previewHeadLeft && previewHeadRight) {
-		previewHeadLeft.textContent = 'No';
-		previewHeadLeft.style.width = '70px';
-		previewHeadRight.textContent = 'SPX Tracking Number';
-	}
+
 
 	syncMassUploadData(filteredRows);
 
@@ -3602,18 +3724,7 @@ function refreshPreview() {
 			});
 	}
 
-	if (!filteredRows.length) {
-		const row = document.createElement('tr');
-		row.innerHTML = '<td colspan="2">Belum ada data.</td>';
-		previewBody.appendChild(row);
-		return;
-	}
 
-	filteredRows.forEach((rowData, index) => {
-		const row = document.createElement('tr');
-		row.innerHTML = `<td>${index + 1}</td><td>${escapeHtml(normalize(rowData[COL.SPX]))}</td>`;
-		previewBody.appendChild(row);
-	});
 }
 
 function createPivotData(rows) {
@@ -3686,7 +3797,7 @@ function validateBeforeGenerate(requireOperator = false) {
 	}
 	const trip = normalize(tripInput.value);
 	if (!trip) {
-		setError('LineHaul Trip Number wajib diisi.');
+		setError('Upload Surat Jalan terlebih dahulu untuk mendapatkan LT Number.');
 		return null;
 	}
 
@@ -3698,7 +3809,7 @@ function validateBeforeGenerate(requireOperator = false) {
 	}
 
 	if (tripColumnIndex === -1) {
-		const message = 'Missing column in uploaded file: Line Hual Trip Number';
+		const message = 'Kolom Line Hual Trip Number tidak ditemukan. Pastikan file TO Management sudah benar.';
 		setWarning(message);
 		showWarningToast(message);
 		return null;
@@ -3712,7 +3823,7 @@ function validateBeforeGenerate(requireOperator = false) {
 	}
 
 	if (requireOperator && operatorColumnIndex === -1) {
-		const message = 'Missing column in uploaded file: Operator';
+		const message = 'File TO Management belum diunggah. Unggah file untuk melanjutkan.';
 		setWarning(message);
 		showWarningToast(message);
 		return null;
@@ -3800,7 +3911,7 @@ function bindKeyboardShortcuts() {
 		if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 't') {
 			event.preventDefault();
 			setActiveTool('to');
-			generateTOBtn.click();
+
 		}
 	});
 }
@@ -3846,8 +3957,7 @@ function bindUploadEvents() {
 function init() {
 	populateSlots();
 	reportDateInput.value = getTodayInputDate();
-	updateOperatorCounter();
-	updateOperatorDetectedCounter();
+	updateDateDisplay();
 	updateTripDetectedCounter();
 	setTripDropdownOptions([]);
 	renderSelectedOperatorTags();
@@ -3969,6 +4079,12 @@ function init() {
 		}
 	});
 
+	operatorCombobox.addEventListener('click', (event) => {
+		if (event.target === operatorCombobox || event.target === selectedOperatorTags) {
+			operatorInput.focus();
+		}
+	});
+
 	document.addEventListener('click', (event) => {
 		if (!operatorCombobox.contains(event.target)) {
 			closeOperatorDropdown();
@@ -3981,21 +4097,7 @@ function init() {
 		}
 	});
 
-	selectAllOperatorsBtn.addEventListener('click', () => {
-		selectedOperators = [...availableOperators];
-		renderSelectedOperatorTags();
-		renderOperatorDropdown();
-		updateOperatorCounter();
-		refreshPreview();
-	});
 
-	clearOperatorsBtn.addEventListener('click', () => {
-		selectedOperators = [];
-		renderSelectedOperatorTags();
-		renderOperatorDropdown();
-		updateOperatorCounter();
-		refreshPreview();
-	});
 
 	tripInput.addEventListener('change', () => {
 		refreshPreview();
@@ -4058,12 +4160,19 @@ function init() {
 
 	fixMassUploadDimensionsBtn.addEventListener('click', () => {
 		setMassUploadStatus('Fixing dimensions...', 'processing');
-		const repairedCount = fixMassUploadDimensions();
-		if (repairedCount > 0) {
-			setMassUploadStatus(`${repairedCount} rows fixed. Review and apply changes.`, 'success');
+		const result = fixMassUploadDimensions();
+		if (result.total > 0) {
+			const parts = [];
+			if (result.fixMeCount > 0) {
+				parts.push(`${result.fixMeCount} FIX_ME`);
+			}
+			if (result.emptyCount > 0) {
+				parts.push(`${result.emptyCount} kosong`);
+			}
+			setMassUploadStatus(`${result.total} rows fixed (${parts.join(', ')}). Review and apply changes.`, 'success');
 			return;
 		}
-		setMassUploadStatus('No FIX_ME rows detected to fix.', 'warning');
+		setMassUploadStatus('No FIX_ME or empty rows detected to fix.', 'warning');
 	});
 
 	applyMassUploadChangesBtn.addEventListener('click', () => {
@@ -4139,7 +4248,61 @@ function init() {
 	}, true);
 
 	slotSelect.addEventListener('change', updateReportSummary);
-	reportDateInput.addEventListener('change', updateReportSummary);
+	reportDateInput.addEventListener('change', () => {
+		updateReportSummary();
+		updateDateDisplay();
+	});
+
+	// Click anywhere on date box to open date picker
+	const dateWrapper = document.getElementById('dateDisplayWrapper');
+	if (dateWrapper && reportDateInput) {
+		dateWrapper.addEventListener('click', (e) => {
+			if (e.target === reportDateInput) return; // already handled natively
+			try {
+				reportDateInput.showPicker();
+			} catch {
+				reportDateInput.focus();
+				reportDateInput.click();
+			}
+		});
+	}
+
+	// Hub select handler
+	if (hubSelect) {
+		hubSelect.addEventListener('change', () => {
+			if (hubSelect.value === '__custom__') {
+				hubSelectWrapper?.classList.add('hub-custom-active');
+				if (hubCustomInput) {
+					hubCustomInput.style.display = '';
+					hubCustomInput.focus();
+				}
+			} else {
+				hubSelectWrapper?.classList.remove('hub-custom-active');
+				if (hubCustomInput) {
+					hubCustomInput.style.display = 'none';
+					hubCustomInput.value = '';
+				}
+			}
+			onHubChanged();
+		});
+	}
+
+	if (hubCustomInput) {
+		hubCustomInput.addEventListener('input', () => {
+			onHubChanged();
+		});
+
+		// Allow pressing Escape to go back to dropdown
+		hubCustomInput.addEventListener('keydown', (e) => {
+			if (e.key === 'Escape') {
+				hubSelect.value = 'Ciputat 4 First Mile Hub';
+				hubSelectWrapper?.classList.remove('hub-custom-active');
+				hubCustomInput.style.display = 'none';
+				hubCustomInput.value = '';
+				onHubChanged();
+			}
+		});
+	}
 
 	copyLinehaulReportBtn?.addEventListener('click', () => {
 		copyReportTemplateText('linehaul');
@@ -4166,29 +4329,7 @@ function init() {
 		copyTrackingNumbers(massRows);
 	});
 
-	generateTOBtn.addEventListener('click', () => {
-		resetMessages();
-		clearWarning();
-		setButtonLoading(generateTOBtn, true, 'Generating Report...');
-		showProcessingToast([
-			'Filtering dataset',
-			'Generating TO Management Report'
-		]);
-		try {
-			const tripRows = validateBeforeGenerate(false);
-			if (!tripRows) {
-				return;
-			}
-			generateTOManagementReport(tripRows);
-			setSuccess('TO Management Report berhasil digenerate.');
-			showReportSuccessToast(['TO Management Report downloaded']);
-		} catch (error) {
-			setError(`Gagal generate report: ${error.message}`);
-			showReportErrorToast();
-		} finally {
-			setButtonLoading(generateTOBtn, false);
-		}
-	});
+
 
 	generateAllBtn.addEventListener('click', generateAllReports);
 	generateAllInlineBtn?.addEventListener('click', generateAllReports);
@@ -4217,4 +4358,1395 @@ function init() {
 	});
 }
 
+// ========================================
+// DATABASE UPLOAD SECTION - Logic
+// ========================================
+
+const dbToFileInput = document.getElementById('dbToFileInput');
+const dbToDropzone = document.getElementById('dbToDropzone');
+const dbToChooseBtn = document.getElementById('dbToChooseBtn');
+const dbToAddMoreBtn = document.getElementById('dbToAddMoreBtn');
+const dbToLoadedFiles = document.getElementById('dbToLoadedFiles');
+const dbToFileCount = document.getElementById('dbToFileCount');
+
+const dbSjFileInput = document.getElementById('dbSjFileInput');
+const dbSjDropzone = document.getElementById('dbSjDropzone');
+const dbSjChooseBtn = document.getElementById('dbSjChooseBtn');
+const dbSjReplaceBtn = document.getElementById('dbSjReplaceBtn');
+const dbSjClearBtn = document.getElementById('dbSjClearBtn');
+const dbSjLoadedFiles = document.getElementById('dbSjLoadedFiles');
+const dbSjFileCount = document.getElementById('dbSjFileCount');
+
+function dbFormatFileSize(bytes) {
+	if (!bytes) return '0 B';
+	const units = ['B', 'KB', 'MB', 'GB'];
+	let size = bytes;
+	let unit = 0;
+	while (size >= 1024 && unit < units.length - 1) { size /= 1024; unit++; }
+	return `${unit === 0 ? Math.round(size) : size.toFixed(1)} ${units[unit]}`;
+}
+
+function dbFileChipIconSvg(fileName) {
+	const ext = String(fileName || '').split('.').pop().toLowerCase();
+	if (ext === 'pdf') {
+		return '<svg viewBox="0 0 24 24"><path d="M14 2H7a3 3 0 0 0-3 3v14a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3V8z" fill="#FFCDD2" stroke="#C62828" stroke-width="2" stroke-linejoin="round"/><path d="M14 2v6a2 2 0 0 0 2 2h4" fill="#EF9A9A" stroke="#C62828" stroke-width="1.8" stroke-linejoin="round"/></svg>';
+	}
+	return '<svg viewBox="0 0 24 24"><rect x="3" y="2" width="18" height="20" rx="3.5" fill="#E8F5E9" stroke="#2D2D2D" stroke-width="2"/><line x1="7" y1="8" x2="17" y2="8" stroke="#66BB6A" stroke-width="2" stroke-linecap="round"/><line x1="7" y1="12" x2="14" y2="12" stroke="#43A047" stroke-width="2" stroke-linecap="round"/></svg>';
+}
+
+function renderDbToFiles() {
+	if (!dbToLoadedFiles || !dbToFileCount || !dbToDropzone) return;
+
+	dbToFileCount.textContent = `${dbToFiles.length} file`;
+	dbToDropzone.setAttribute('data-state', dbToFiles.length > 0 ? 'loaded' : 'empty');
+
+	dbToLoadedFiles.innerHTML = dbToFiles.map((f, i) => `
+		<div class="db-file-chip">
+			<span class="db-file-chip-icon">${dbFileChipIconSvg(f.name)}</span>
+			<span class="db-file-chip-name" title="${escapeHtml(f.name)}">${escapeHtml(f.name)}</span>
+			<span class="db-file-chip-size">${dbFormatFileSize(f.size)}</span>
+			<button type="button" class="db-file-chip-remove" data-db-to-remove="${i}" aria-label="Remove ${escapeHtml(f.name)}">&times;</button>
+		</div>
+	`).join('');
+
+	// Update stats
+	updateDbToStats();
+}
+
+function updateDbToStats() {
+	const statTO = document.getElementById('dbToStatTO');
+	const statOperators = document.getElementById('dbToStatOperators');
+	const statLT = document.getElementById('dbToStatLT');
+	const statQty = document.getElementById('dbToStatQty');
+
+	if (statOperators) {
+		statOperators.textContent = availableOperators.length > 0 ? availableOperators.length.toLocaleString('id-ID') : '-';
+	}
+	
+	if (statTO || statLT || statQty) {
+		if (dataset.length > 0 && typeof headerRow !== 'undefined') {
+			const uniqueTOs = new Set();
+			const uniqueLTs = new Set();
+			const uniqueTrackings = new Set();
+			
+			const toIndex = getColumnIndexByNames(['TO Number', 'TO_Number', 'Nomor TO', 'TO number', 'to number', 'TO No', 'TO_No']);
+			const ltIndex = getColumnIndexByNames(['Line Hual Trip Number', 'LineHaul Trip Number', 'LT Number']);
+			const trackingIndex = getColumnIndexByNames(['SPX Tracking Number', 'Tracking Number', 'Resi']);
+			
+			for (const row of dataset) {
+				const to = toIndex !== -1 ? String(row[toIndex] || '').trim() : '';
+				if (to) uniqueTOs.add(to);
+				
+				const lt = ltIndex !== -1 ? String(row[ltIndex] || '').trim() : '';
+				if (lt) uniqueLTs.add(lt);
+				
+				const tracking = trackingIndex !== -1 ? String(row[trackingIndex] || '').trim() : '';
+				if (tracking) uniqueTrackings.add(tracking);
+			}
+			
+			if (statTO) statTO.textContent = uniqueTOs.size > 0 ? uniqueTOs.size.toLocaleString('id-ID') : '-';
+			if (statLT) statLT.textContent = uniqueLTs.size > 0 ? uniqueLTs.size.toLocaleString('id-ID') : '-';
+			if (statQty) statQty.textContent = uniqueTrackings.size > 0 ? uniqueTrackings.size.toLocaleString('id-ID') : '-';
+		} else {
+			if (statTO) statTO.textContent = '-';
+			if (statLT) statLT.textContent = '-';
+			if (statQty) statQty.textContent = '-';
+		}
+	}
+}
+
+function renderDbSjFile() {
+	if (!dbSjLoadedFiles || !dbSjFileCount || !dbSjDropzone) return;
+
+	dbSjFileCount.textContent = dbSjFile ? '1 file' : '0 file';
+	dbSjDropzone.setAttribute('data-state', dbSjFile ? 'loaded' : 'empty');
+
+	if (!dbSjFile) {
+		dbSjLoadedFiles.innerHTML = '';
+		updateDbSjExtracted();
+		return;
+	}
+
+	dbSjLoadedFiles.innerHTML = '';
+}
+
+function updateDbSjExtracted() {
+	const container = document.getElementById('dbSjExtracted');
+	if (!container) return;
+
+	const driver = getTextValue(driverNameEl);
+	const plate = getTextValue(plateNumberEl);
+	const destination = getTextValue(destinationEl);
+	const ltNumber = getTextValue(ltNumberEl);
+	const totalToQty = getTextValue(totalToQtyEl);
+	const orderQty = getTextValue(orderQtyEl);
+
+	const hasData = dbSjFile && (driver !== '-' || plate !== '-' || destination !== '-');
+
+	if (!hasData) {
+		container.classList.remove('has-data');
+		container.innerHTML = '';
+		return;
+	}
+
+	container.classList.add('has-data');
+	container.innerHTML = `
+		<div class="db-sj-info-item span-full" style="background:var(--primary); border:var(--cartoon-border); padding:8px 12px; margin-bottom:4px; display:flex; flex-direction:row; justify-content:space-between; align-items:center;">
+			<span class="db-sj-info-label" style="color:#FFF; font-size:11px;">LT Number</span>
+			<span class="db-sj-info-value" style="color:#FFF; font-size:15px;">${escapeHtml(ltNumber)}</span>
+		</div>
+		<div class="db-sj-info-item">
+			<span class="db-sj-info-label">Nama Driver</span>
+			<span class="db-sj-info-value" title="${escapeHtml(driver)}">${escapeHtml(driver)}</span>
+		</div>
+		<div class="db-sj-info-item">
+			<span class="db-sj-info-label">No Polisi</span>
+			<span class="db-sj-info-value">${escapeHtml(plate)}</span>
+		</div>
+		<div class="db-sj-info-item span-full">
+			<span class="db-sj-info-label">Next Destination</span>
+			<span class="db-sj-info-value" title="${escapeHtml(destination)}">${escapeHtml(destination)}</span>
+		</div>
+		<div class="db-sj-info-item span-full">
+			<span class="db-sj-info-label">Total Order Quantity</span>
+			<span class="db-sj-info-value">${escapeHtml(orderQty)}</span>
+		</div>
+	`;
+}
+
+async function extractDbFiles(fileList) {
+	let finalFiles = [];
+	let hasRar = false;
+
+	for (let i = 0; i < fileList.length; i++) {
+		const f = fileList[i];
+		const ext = f.name.toLowerCase().split('.').pop();
+		
+		if (['xlsx', 'csv', 'xls'].includes(ext)) {
+			finalFiles.push(f);
+		} else if (ext === 'zip') {
+			try {
+				if (typeof JSZip === 'undefined') {
+					console.warn('JSZip library not loaded');
+					continue;
+				}
+				const zip = new JSZip();
+				const contents = await zip.loadAsync(f);
+				for (const [filename, fileData] of Object.entries(contents.files)) {
+					if (!fileData.dir && !filename.startsWith('__MACOSX/')) {
+						const innerExt = filename.toLowerCase().split('.').pop();
+						if (['xlsx', 'csv', 'xls'].includes(innerExt)) {
+							const blob = await fileData.async('blob');
+							const extractedFile = new File([blob], filename, { type: blob.type, lastModified: fileData.date.getTime() });
+							finalFiles.push(extractedFile);
+						}
+					}
+				}
+			} catch (err) {
+				console.error('Failed to extract ZIP:', err);
+				showWarningToast(`Gagal mengekstrak ${f.name}: File korup atau format tidak didukung.`);
+			}
+		} else if (ext === 'rar') {
+			hasRar = true;
+		}
+	}
+
+	if (hasRar) {
+		showWarningToast('Format .rar belum didukung otomatis, mohon gunakan format .zip untuk mengekstrak data.');
+	}
+
+	return finalFiles;
+}
+
+async function handleDbToFilesAdded(fileList) {
+	if (dbToDropzone) dbToDropzone.setAttribute('data-state', 'loading');
+
+	const newFiles = await extractDbFiles(fileList);
+
+	if (!newFiles.length) {
+		if (dbToDropzone) dbToDropzone.setAttribute('data-state', dbToFiles.length ? 'loaded' : 'empty');
+		showWarningToast('Hanya file Excel (.xlsx, .xls), CSV (.csv), dan ZIP (.zip) yang didukung.');
+		return;
+	}
+
+	// Add to list (avoid exact duplicate names)
+	const existingNames = new Set(dbToFiles.map(f => f.name));
+	let addedCount = 0;
+	for (const f of newFiles) {
+		if (!existingNames.has(f.name)) {
+			dbToFiles.push(f);
+			existingNames.add(f.name);
+			addedCount++;
+		}
+	}
+
+	if (addedCount === 0) {
+		if (dbToDropzone) dbToDropzone.setAttribute('data-state', dbToFiles.length ? 'loaded' : 'empty');
+		showToast({
+			type: 'error',
+			title: 'File Duplikat',
+			message: 'Semua file yang dipilih sudah ada di daftar upload.',
+			duration: 4000
+		});
+		return;
+	}
+
+	// Auto-merge and load all TO files into the existing Global Source pipeline
+	await mergeAndLoadToFiles();
+
+	// Re-render AFTER merge so stats reflect the fully-loaded dataset
+	renderDbToFiles();
+
+	showToast({
+		type: 'success',
+		title: 'TO Management Files',
+		message: `${addedCount} file ditambahkan. Total: ${dbToFiles.length} file.`,
+		duration: 3000
+	});
+}
+
+async function mergeAndLoadToFiles() {
+	if (!dbToFiles.length) {
+		return;
+	}
+
+	try {
+		resetMessages();
+		clearWarning();
+		clearProgress();
+		resetOperatorState();
+		resetTripState();
+		setUploaderState('loading');
+
+		let allHeadersSet = new Set();
+		let fileObjectsData = [];
+		let totalRowsBefore = 0;
+
+		for (const file of dbToFiles) {
+			const extension = file.name.toLowerCase().split('.').pop();
+			const aoa = extension === 'csv' ? await parseCSV(file) : await parseExcel(file);
+
+			if (!aoa.length || aoa.length < 2) continue;
+
+			const fileHeader = aoa[0].map(h => String(h || '').trim());
+			const fileData = aoa.slice(1);
+
+			fileHeader.forEach(h => {
+				if (h) allHeadersSet.add(h);
+			});
+
+			totalRowsBefore += fileData.length;
+			fileObjectsData.push({ header: fileHeader, data: fileData });
+		}
+
+		if (fileObjectsData.length === 0) {
+			throw new Error('Tidak ada data valid di file yang diupload.');
+		}
+
+		let mergedHeaders = Array.from(allHeadersSet);
+		let mergedData = [];
+
+		for (const fileObj of fileObjectsData) {
+			const indexMap = fileObj.header.map(h => mergedHeaders.indexOf(h));
+
+			for (const row of fileObj.data) {
+				const mergedRow = new Array(mergedHeaders.length).fill('');
+				for (let i = 0; i < row.length; i++) {
+					const destIndex = indexMap[i];
+					if (destIndex !== -1) {
+						mergedRow[destIndex] = row[i];
+					}
+				}
+				mergedData.push(mergedRow);
+			}
+		}
+
+		if (!mergedHeaders.length || !mergedData.length) {
+			throw new Error('Tidak ada data valid di file yang diupload.');
+		}
+
+		headerRow = mergedHeaders;
+		dataset = mergedData;
+		rebuildOperatorOptionsFromDataset();
+		rebuildTripOptionsFromDataset();
+		updateRequiredColumnsWarning(true);
+
+		const detectedTrip = normalize(tripInput.value);
+		updateLoadedMeta(
+			{ name: `${dbToFiles.length} file(s) merged`, size: dbToFiles.reduce((s, f) => s + f.size, 0) },
+			dataset.length,
+			detectedTrip
+		);
+		setUploaderState('loaded');
+		refreshPreview();
+	} catch (error) {
+		dataset = [];
+		headerRow = [];
+		massUploadData = [];
+		massUploadDraftData = [];
+		resetOperatorState();
+		resetTripState();
+		resetLoadedMeta();
+		setUploaderState('empty');
+		setError(`Gagal membaca file TO: ${error.message}`);
+	}
+}
+
+async function handleDbSjFileAdded(file) {
+	if (!file) return;
+
+	const ext = file.name.toLowerCase().split('.').pop();
+	if (ext !== 'pdf') {
+		showWarningToast('Hanya file PDF yang didukung untuk Surat Jalan.');
+		return;
+	}
+
+	if (dbSjDropzone) dbSjDropzone.setAttribute('data-state', 'loading');
+
+	dbSjFile = file;
+
+	// Also feed into the existing Prealert PDF pipeline
+	if (prealertPdfInput && typeof DataTransfer !== 'undefined') {
+		const dt = new DataTransfer();
+		dt.items.add(file);
+		prealertPdfInput.files = dt.files;
+	}
+
+	await handlePrealertPdfUpload(file);
+	updateDbSjExtracted();
+	renderDbSjFile();
+
+	showToast({
+		type: 'success',
+		title: 'Surat Jalan Uploaded',
+		message: `File "${file.name}" berhasil diupload dan diekstrak.`,
+		duration: 3000
+	});
+}
+
+function bindDatabaseUploadEvents() {
+	if (!dbToDropzone || !dbSjDropzone) return;
+
+	// === TO Management ===
+	dbToDropzone.addEventListener('dragover', (e) => { e.preventDefault(); dbToDropzone.classList.add('dragover'); });
+	dbToDropzone.addEventListener('dragleave', () => dbToDropzone.classList.remove('dragover'));
+	dbToDropzone.addEventListener('drop', (e) => {
+		e.preventDefault();
+		dbToDropzone.classList.remove('dragover');
+		if (e.dataTransfer?.files?.length) handleDbToFilesAdded(e.dataTransfer.files);
+	});
+	dbToDropzone.addEventListener('click', (e) => {
+		if (e.target.closest('.db-file-chip-remove') || e.target.closest('.db-action-btn')) return;
+		if (dbToDropzone.getAttribute('data-state') === 'empty') dbToFileInput.click();
+	});
+
+	dbToFileInput.addEventListener('change', (e) => {
+		if (e.target.files?.length) handleDbToFilesAdded(e.target.files);
+		dbToFileInput.value = '';
+	});
+
+	dbToChooseBtn.addEventListener('click', (e) => { e.stopPropagation(); dbToFileInput.click(); });
+	dbToAddMoreBtn.addEventListener('click', (e) => { e.stopPropagation(); dbToFileInput.click(); });
+
+	// Remove individual TO file chip
+	dbToLoadedFiles.addEventListener('click', async (e) => {
+		const removeBtn = e.target.closest('[data-db-to-remove]');
+		if (!removeBtn) return;
+		const idx = parseInt(removeBtn.getAttribute('data-db-to-remove'), 10);
+		if (Number.isFinite(idx) && idx >= 0 && idx < dbToFiles.length) {
+			dbToDropzone.setAttribute('data-state', 'loading');
+			dbToFiles.splice(idx, 1);
+			if (dbToFiles.length > 0) {
+				await mergeAndLoadToFiles();
+				// Re-render again so stats reflect updated dataset
+				renderDbToFiles();
+			} else {
+				clearSourceFile();
+				dbToDropzone.setAttribute('data-state', 'empty');
+				renderDbToFiles();
+			}
+		}
+	});
+
+	// === Surat Jalan ===
+	dbSjDropzone.addEventListener('dragover', (e) => { e.preventDefault(); dbSjDropzone.classList.add('dragover'); });
+	dbSjDropzone.addEventListener('dragleave', () => dbSjDropzone.classList.remove('dragover'));
+	dbSjDropzone.addEventListener('drop', (e) => {
+		e.preventDefault();
+		dbSjDropzone.classList.remove('dragover');
+		if (e.dataTransfer?.files?.[0]) handleDbSjFileAdded(e.dataTransfer.files[0]);
+	});
+	dbSjDropzone.addEventListener('click', (e) => {
+		if (e.target.closest('.db-action-btn')) return;
+		if (dbSjDropzone.getAttribute('data-state') === 'empty') dbSjFileInput.click();
+	});
+
+	dbSjFileInput.addEventListener('change', (e) => {
+		if (e.target.files?.[0]) handleDbSjFileAdded(e.target.files[0]);
+		dbSjFileInput.value = '';
+	});
+
+	dbSjChooseBtn.addEventListener('click', (e) => { e.stopPropagation(); dbSjFileInput.click(); });
+	dbSjReplaceBtn.addEventListener('click', (e) => { e.stopPropagation(); dbSjFileInput.click(); });
+	dbSjClearBtn.addEventListener('click', (e) => {
+		e.stopPropagation();
+		dbSjFile = null;
+		renderDbSjFile();
+		showToast({ type: 'success', title: 'Removed', message: 'Surat Jalan file dihapus.', duration: 2500 });
+	});
+
+	// === More Toggle Button ===
+	bindDbMoreToggle();
+
+	// === Extra Upload Cards ===
+	bindDbExtraUploadCards();
+}
+
+// ========================================
+// DATABASE MORE TOGGLE — expand/collapse
+// ========================================
+
+function bindDbMoreToggle() {
+	const toggleBtn = document.getElementById('dbMoreToggleBtn');
+	const moreContent = document.getElementById('dbMoreContent');
+	if (!toggleBtn || !moreContent) return;
+
+	toggleBtn.addEventListener('click', () => {
+		const isOpen = moreContent.classList.contains('is-open');
+		const labelEl = toggleBtn.querySelector('.database-more-label');
+		
+		if (isOpen) {
+			moreContent.style.overflow = 'hidden';
+			moreContent.classList.remove('is-open');
+			moreContent.setAttribute('aria-hidden', 'true');
+			toggleBtn.setAttribute('aria-expanded', 'false');
+			if (labelEl) labelEl.textContent = 'More';
+		} else {
+			moreContent.classList.add('is-open');
+			moreContent.setAttribute('aria-hidden', 'false');
+			toggleBtn.setAttribute('aria-expanded', 'true');
+			if (labelEl) labelEl.textContent = 'Collapse';
+			
+			// Wait for the slide-down transition (0.4s) to complete before allowing overflow visible for shadows
+			setTimeout(() => {
+				if (moreContent.classList.contains('is-open')) {
+					moreContent.style.overflow = 'visible';
+				}
+			}, 400);
+		}
+	});
+}
+
+// ========================================
+// EXTRA DATABASE UPLOAD CARDS — Logic
+// ========================================
+
+// Storage for uploaded files per extra card
+const dbExtraFiles = {
+	order: [],
+	pickupAssign: [],
+	pickupMgmt: [],
+	pickupPerf: [],
+	receiveMgmt: []
+};
+
+// Merged/parsed data for each extra card (Dynamic Header Matching)
+const dbExtraMergedData = {
+	order: { header: [], data: [] },
+	pickupAssign: { header: [], data: [] },
+	pickupMgmt: { header: [], data: [] },
+	pickupPerf: { header: [], data: [] },
+	receiveMgmt: { header: [], data: [] }
+};
+
+async function mergeAndLoadExtraFiles(cardKey) {
+	const files = dbExtraFiles[cardKey] || [];
+	if (!files.length) {
+		dbExtraMergedData[cardKey] = { header: [], data: [] };
+		return;
+	}
+
+	try {
+		let allHeadersSet = new Set();
+		let fileObjectsData = [];
+
+		for (const file of files) {
+			const extension = file.name.toLowerCase().split('.').pop();
+			const aoa = extension === 'csv' ? await parseCSV(file) : await parseExcel(file);
+
+			if (!aoa.length || aoa.length < 2) continue;
+
+			const fileHeader = aoa[0].map(h => String(h || '').trim());
+			const fileData = aoa.slice(1);
+
+			fileHeader.forEach(h => {
+				if (h) allHeadersSet.add(h);
+			});
+
+			fileObjectsData.push({ header: fileHeader, data: fileData });
+		}
+
+		if (fileObjectsData.length === 0) {
+			dbExtraMergedData[cardKey] = { header: [], data: [] };
+			return;
+		}
+
+		const mergedHeaders = Array.from(allHeadersSet);
+		const mergedData = [];
+
+		for (const fileObj of fileObjectsData) {
+			const indexMap = fileObj.header.map(h => mergedHeaders.indexOf(h));
+
+			for (const row of fileObj.data) {
+				const mergedRow = new Array(mergedHeaders.length).fill('');
+				for (let i = 0; i < row.length; i++) {
+					const destIndex = indexMap[i];
+					if (destIndex !== -1) {
+						mergedRow[destIndex] = row[i];
+					}
+				}
+				mergedData.push(mergedRow);
+			}
+		}
+
+		dbExtraMergedData[cardKey] = { header: mergedHeaders, data: mergedData };
+	} catch (error) {
+		console.error(`Error merging ${cardKey} files:`, error);
+		dbExtraMergedData[cardKey] = { header: [], data: [] };
+	}
+}
+
+// Configuration for each extra card
+const dbExtraCardConfig = [
+	{
+		key: 'order',
+		fileInputId: 'dbOrderFileInput',
+		dropzoneId: 'dbOrderDropzone',
+		chooseBtnId: 'dbOrderChooseBtn',
+		addMoreBtnId: 'dbOrderAddMoreBtn',
+		loadedFilesId: 'dbOrderLoadedFiles',
+		fileCountId: 'dbOrderFileCount',
+		label: 'Order Management'
+	},
+	{
+		key: 'pickupAssign',
+		fileInputId: 'dbPickupAssignFileInput',
+		dropzoneId: 'dbPickupAssignDropzone',
+		chooseBtnId: 'dbPickupAssignChooseBtn',
+		addMoreBtnId: 'dbPickupAssignAddMoreBtn',
+		loadedFilesId: 'dbPickupAssignLoadedFiles',
+		fileCountId: 'dbPickupAssignFileCount',
+		label: 'Pick Up Assignment'
+	},
+	{
+		key: 'pickupMgmt',
+		fileInputId: 'dbPickupMgmtFileInput',
+		dropzoneId: 'dbPickupMgmtDropzone',
+		chooseBtnId: 'dbPickupMgmtChooseBtn',
+		addMoreBtnId: 'dbPickupMgmtAddMoreBtn',
+		loadedFilesId: 'dbPickupMgmtLoadedFiles',
+		fileCountId: 'dbPickupMgmtFileCount',
+		label: 'Pick Up Management'
+	},
+	{
+		key: 'pickupPerf',
+		fileInputId: 'dbPickupPerfFileInput',
+		dropzoneId: 'dbPickupPerfDropzone',
+		chooseBtnId: 'dbPickupPerfChooseBtn',
+		addMoreBtnId: 'dbPickupPerfAddMoreBtn',
+		loadedFilesId: 'dbPickupPerfLoadedFiles',
+		fileCountId: 'dbPickupPerfFileCount',
+		label: 'Pick Up Performance Report'
+	},
+	{
+		key: 'receiveMgmt',
+		fileInputId: 'dbReceiveMgmtFileInput',
+		dropzoneId: 'dbReceiveMgmtDropzone',
+		chooseBtnId: 'dbReceiveMgmtChooseBtn',
+		addMoreBtnId: 'dbReceiveMgmtAddMoreBtn',
+		loadedFilesId: 'dbReceiveMgmtLoadedFiles',
+		fileCountId: 'dbReceiveMgmtFileCount',
+		label: 'Receive Management'
+	}
+];
+
+function renderDbExtraFiles(cardKey) {
+	const config = dbExtraCardConfig.find(c => c.key === cardKey);
+	if (!config) return;
+
+	const loadedFilesEl = document.getElementById(config.loadedFilesId);
+	const fileCountEl = document.getElementById(config.fileCountId);
+	const dropzoneEl = document.getElementById(config.dropzoneId);
+	const files = dbExtraFiles[cardKey] || [];
+
+	if (!loadedFilesEl || !fileCountEl || !dropzoneEl) return;
+
+	fileCountEl.textContent = `${files.length} file`;
+	dropzoneEl.setAttribute('data-state', files.length > 0 ? 'loaded' : 'empty');
+
+	loadedFilesEl.innerHTML = files.map((f, i) => `
+		<div class="db-file-chip">
+			<span class="db-file-chip-icon">${dbFileChipIconSvg(f.name)}</span>
+			<span class="db-file-chip-name" title="${escapeHtml(f.name)}">${escapeHtml(f.name)}</span>
+			<span class="db-file-chip-size">${dbFormatFileSize(f.size)}</span>
+			<button type="button" class="db-file-chip-remove" data-db-extra-remove="${cardKey}:${i}" aria-label="Remove ${escapeHtml(f.name)}">&times;</button>
+		</div>
+	`).join('');
+}
+
+async function handleDbExtraFilesAdded(cardKey, fileList) {
+	const config = dbExtraCardConfig.find(c => c.key === cardKey);
+	if (!config) return;
+
+	const dropzone = document.getElementById(config.dropzoneId);
+	if (dropzone) dropzone.setAttribute('data-state', 'loading');
+
+	const newFiles = await extractDbFiles(fileList);
+
+	if (!newFiles.length) {
+		if (dropzone) dropzone.setAttribute('data-state', (dbExtraFiles[cardKey] && dbExtraFiles[cardKey].length) ? 'loaded' : 'empty');
+		showWarningToast('Hanya file Excel (.xlsx, .xls), CSV (.csv), dan ZIP (.zip) yang didukung.');
+		return;
+	}
+
+	const existingNames = new Set((dbExtraFiles[cardKey] || []).map(f => f.name));
+	let addedCount = 0;
+	for (const f of newFiles) {
+		if (!existingNames.has(f.name)) {
+			dbExtraFiles[cardKey].push(f);
+			existingNames.add(f.name);
+			addedCount++;
+		}
+	}
+
+	if (addedCount === 0) {
+		if (dropzone) dropzone.setAttribute('data-state', (dbExtraFiles[cardKey] && dbExtraFiles[cardKey].length) ? 'loaded' : 'empty');
+		showToast({
+			type: 'error',
+			title: 'File Duplikat',
+			message: 'Semua file yang dipilih sudah ada di daftar upload.',
+			duration: 4000
+		});
+		return;
+	}
+
+	await mergeAndLoadExtraFiles(cardKey);
+	renderDbExtraFiles(cardKey);
+
+	showToast({
+		type: 'success',
+		title: config.label,
+		message: `${addedCount} file ditambahkan. Total: ${dbExtraFiles[cardKey].length} file.`,
+		duration: 3000
+	});
+}
+
+function bindDbExtraUploadCards() {
+	for (const config of dbExtraCardConfig) {
+		const fileInput = document.getElementById(config.fileInputId);
+		const dropzone = document.getElementById(config.dropzoneId);
+		const chooseBtn = document.getElementById(config.chooseBtnId);
+		const addMoreBtn = document.getElementById(config.addMoreBtnId);
+		const loadedFilesEl = document.getElementById(config.loadedFilesId);
+
+		if (!fileInput || !dropzone) continue;
+
+		// Drag & drop
+		dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('dragover'); });
+		dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+		dropzone.addEventListener('drop', (e) => {
+			e.preventDefault();
+			dropzone.classList.remove('dragover');
+			if (e.dataTransfer?.files?.length) handleDbExtraFilesAdded(config.key, e.dataTransfer.files);
+		});
+
+		// Click on dropzone (empty state)
+		dropzone.addEventListener('click', (e) => {
+			if (e.target.closest('.db-file-chip-remove') || e.target.closest('.db-action-btn')) return;
+			if (dropzone.getAttribute('data-state') === 'empty') fileInput.click();
+		});
+
+		// File input change
+		fileInput.addEventListener('change', (e) => {
+			if (e.target.files?.length) handleDbExtraFilesAdded(config.key, e.target.files);
+			fileInput.value = '';
+		});
+
+		// Choose / Add More buttons
+		if (chooseBtn) chooseBtn.addEventListener('click', (e) => { e.stopPropagation(); fileInput.click(); });
+		if (addMoreBtn) addMoreBtn.addEventListener('click', (e) => { e.stopPropagation(); fileInput.click(); });
+
+		// Remove individual file chip
+		if (loadedFilesEl) {
+			loadedFilesEl.addEventListener('click', async (e) => {
+				const removeBtn = e.target.closest('[data-db-extra-remove]');
+				if (!removeBtn) return;
+				const [key, idxStr] = (removeBtn.getAttribute('data-db-extra-remove') || '').split(':');
+				const idx = parseInt(idxStr, 10);
+				if (key && dbExtraFiles[key] && Number.isFinite(idx) && idx >= 0 && idx < dbExtraFiles[key].length) {
+					const dz = document.getElementById(dbExtraCardConfig.find(c => c.key === key)?.dropzoneId);
+					if (dz) dz.setAttribute('data-state', 'loading');
+					dbExtraFiles[key].splice(idx, 1);
+					await mergeAndLoadExtraFiles(key);
+					renderDbExtraFiles(key);
+				}
+			});
+		}
+	}
+}
+
 init();
+bindDatabaseUploadEvents();
+
+// ========================================
+// BULKY MEASUREMENT REPORT — JPEG Generator
+// ========================================
+
+const generateBulkyMeasurementBtn = document.getElementById('generateBulkyMeasurementBtn');
+const downloadBulkyMeasurementBtn = document.getElementById('downloadBulkyMeasurementBtn');
+const copyBulkyMeasurementBtn = document.getElementById('copyBulkyMeasurementBtn');
+const closeBulkyMeasurementBtn = document.getElementById('closeBulkyMeasurementBtn');
+const bulkyMeasurementModal = document.getElementById('bulkyMeasurementModal');
+const bmReportPreviewWrap = document.getElementById('bmReportPreviewWrap');
+
+let bmLastRenderedCanvas = null;
+
+function getToNumberColumnIndex() {
+	return getColumnIndexByNames(['TO Number', 'TO_Number', 'Nomor TO', 'TO number', 'to number', 'TO No', 'TO_No']);
+}
+
+function buildBulkyMeasurementData() {
+	const trip = normalize(tripInput.value);
+	if (!trip) return null;
+
+	const tripRows = filterDatasetByTrip(trip);
+	if (!tripRows.length) return null;
+
+	const bulkyRows = filterDatasetByOperator(tripRows, selectedOperators);
+	if (!bulkyRows.length) return null;
+
+	const toColIdx = getToNumberColumnIndex();
+	if (toColIdx === -1) return null;
+
+	// Group by TO Number
+	const toMap = new Map();
+	bulkyRows.forEach(row => {
+		const toNum = normalize(row[toColIdx]);
+		if (!toNum) return;
+		toMap.set(toNum, (toMap.get(toNum) || 0) + 1);
+	});
+
+	const entries = [];
+	let totalQty = 0;
+	let totalSuccess = 0;
+	toMap.forEach((count, toNum) => {
+		entries.push({ toNumber: toNum, qty: count, success: count });
+		totalQty += count;
+		totalSuccess += count;
+	});
+
+	const achievement = totalQty > 0 ? (totalSuccess / totalQty) * 100 : 0;
+
+	return { entries, totalQty, totalSuccess, achievement };
+}
+
+async function renderSuratJalanToCanvas() {
+	const selectedFile = dbSjFile || prealertUploadedPdfFile || prealertPdfInput?.files?.[0];
+	if (!selectedFile) return null;
+
+	if (typeof pdfjsLib === 'undefined' || !pdfjsLib?.getDocument) return null;
+
+	if (pdfjsLib.GlobalWorkerOptions) {
+		pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+	}
+
+	const buffer = await selectedFile.arrayBuffer();
+	const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+
+	// Find the page with Origin + hub name
+	let targetPageNumber = null;
+	const hubNameForPdf = getSelectedHubName();
+	const hubPdfPattern = new RegExp(hubNameForPdf.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s*'), 'i');
+
+	for (let i = 1; i <= pdf.numPages; i++) {
+		const candidatePage = await pdf.getPage(i);
+		const textContent = await candidatePage.getTextContent();
+		const pageText = textContent.items.map(item => item.str).join(' ');
+		if (/Origin/i.test(pageText) && hubPdfPattern.test(pageText)) {
+			targetPageNumber = i;
+			break;
+		}
+	}
+
+	if (!targetPageNumber) {
+		for (let i = 1; i <= pdf.numPages; i++) {
+			const candidatePage = await pdf.getPage(i);
+			const textContent = await candidatePage.getTextContent();
+			const pageText = textContent.items.map(item => item.str).join(' ');
+			if (/Origin/i.test(pageText) && /First\s*Mile\s*Hub/i.test(pageText)) {
+				targetPageNumber = i;
+				break;
+			}
+		}
+	}
+
+	if (!targetPageNumber) targetPageNumber = 1;
+
+	const page = await pdf.getPage(targetPageNumber);
+	// Increase scale for much sharper PDF render
+	const viewport = page.getViewport({ scale: 5.0 });
+	const canvas = document.createElement('canvas');
+	const context = canvas.getContext('2d', { alpha: false });
+	canvas.width = Math.floor(viewport.width);
+	canvas.height = Math.floor(viewport.height);
+	if (!context) return null;
+
+	await page.render({ canvasContext: context, viewport }).promise;
+	return canvas;
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+	ctx.beginPath();
+	ctx.moveTo(x + r, y);
+	ctx.lineTo(x + w - r, y);
+	ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+	ctx.lineTo(x + w, y + h - r);
+	ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+	ctx.lineTo(x + r, y + h);
+	ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+	ctx.lineTo(x, y + r);
+	ctx.quadraticCurveTo(x, y, x + r, y);
+	ctx.closePath();
+}
+
+function drawBulkyMeasurementCanvas(sjCanvas, measurementData, slotLabel, hubName, reportDateText) {
+	const CANVAS_W = 750;
+	const PAD = 30;
+	const INNER_W = CANVAS_W - PAD * 2;
+
+	// Determine Surat Jalan dimensions (cropping top ~41% to give bottom padding)
+	const cropRatio = 0.41;
+	const srcW = sjCanvas ? sjCanvas.width : 1000;
+	const srcH = sjCanvas ? Math.min(sjCanvas.height, Math.round(srcW * cropRatio)) : 380;
+	const sjImgRatio = srcH / srcW;
+	
+	const sjDrawW = INNER_W; // Full width, no horizontal padding
+	const sjDrawH = Math.round(sjDrawW * sjImgRatio);
+	const sjSectionH = sjDrawH; // Card height tightly wraps the image
+
+	// Pre-calculate heights & positions for overlap
+	const SLOT_BADGE_H = 38; 
+	const SJ_SECTION_TOP = 85; // Pushed down to give badge room at top
+	const slotBadgeY = SJ_SECTION_TOP - SLOT_BADGE_H - 12; // Floating above the card
+
+	const MI_BADGE_H = 38; 
+	const TABLE_TOP = SJ_SECTION_TOP + sjSectionH + 70;
+	// Keep spacious top gap for SJ shadow, but reduce bottom gap so table is close like before
+	const MI_BADGE_TOP = SJ_SECTION_TOP + sjSectionH + 24;
+
+	const ROW_H = 34; // Ramping (slimmer rows)
+	const SUPER_HEADER_H = 42; // Slimmer super header
+	const HEADER_H = 36; // Slimmer header
+	const dataRows = measurementData.entries.length;
+	const TABLE_H = SUPER_HEADER_H + HEADER_H + dataRows * ROW_H + ROW_H + ROW_H; // super header + header + data + total + achievement
+	const TABLE_BOTTOM = TABLE_TOP + TABLE_H;
+
+	const FOOTER_H = 60;
+	const CANVAS_H = TABLE_BOTTOM + FOOTER_H + 20;
+	const SHADOW_OFFSET = 8; // For outer cartoon shadow
+
+	// Scale up by 3x for high-resolution output
+	const SCALE = 3;
+	const canvas = document.createElement('canvas');
+	canvas.width = (CANVAS_W + SHADOW_OFFSET) * SCALE;
+	canvas.height = (CANVAS_H + SHADOW_OFFSET) * SCALE;
+	const ctx = canvas.getContext('2d');
+	ctx.scale(SCALE, SCALE);
+
+	// ---- OUTER SHADOW ----
+	ctx.fillStyle = '#2D2D2D';
+	roundRect(ctx, SHADOW_OFFSET, SHADOW_OFFSET, CANVAS_W, CANVAS_H, 32);
+	ctx.fill();
+
+	// ---- BACKGROUND (golden/orange) ----
+	ctx.fillStyle = '#FFC93C';
+	roundRect(ctx, 0, 0, CANVAS_W, CANVAS_H, 32);
+	ctx.fill();
+
+	// Outer dark border
+	ctx.strokeStyle = '#2D2D2D';
+	ctx.lineWidth = 4;
+	roundRect(ctx, 2, 2, CANVAS_W - 4, CANVAS_H - 4, 30);
+	ctx.stroke();
+
+	// Inner border line (double border effect)
+	ctx.strokeStyle = 'rgba(0,0,0,0.1)';
+	ctx.lineWidth = 2;
+	roundRect(ctx, 12, 12, CANVAS_W - 24, CANVAS_H - 24, 24);
+	ctx.stroke();
+
+	// ---- SURAT JALAN CARD ----
+	const sjCardX = PAD;
+	const sjCardY = SJ_SECTION_TOP;
+	const sjCardW = INNER_W;
+	const sjCardH = sjSectionH;
+
+	// Shadow
+	ctx.fillStyle = '#2D2D2D';
+	roundRect(ctx, sjCardX + 6, sjCardY + 6, sjCardW, sjCardH, 24);
+	ctx.fill();
+
+	// Draw the cropped Surat Jalan image as the card itself
+	if (sjCanvas) {
+		ctx.save();
+		roundRect(ctx, sjCardX, sjCardY, sjCardW, sjCardH, 24);
+		ctx.clip();
+		
+		// Fill white background base
+		ctx.fillStyle = '#FFFFFF';
+		ctx.fillRect(sjCardX, sjCardY, sjCardW, sjCardH);
+
+		// Draw only the cropped portion, filling the entire card
+		ctx.drawImage(sjCanvas, 0, 0, srcW, srcH, sjCardX, sjCardY, sjCardW, sjCardH);
+		ctx.restore();
+
+		// Card outer border
+		ctx.strokeStyle = '#2D2D2D';
+		ctx.lineWidth = 3;
+		roundRect(ctx, sjCardX, sjCardY, sjCardW, sjCardH, 24);
+		ctx.stroke();
+	} else {
+		// Fallback white card background
+		ctx.fillStyle = '#FFFFFF';
+		roundRect(ctx, sjCardX, sjCardY, sjCardW, sjCardH, 24);
+		ctx.fill();
+		ctx.strokeStyle = '#2D2D2D';
+		ctx.lineWidth = 3;
+		roundRect(ctx, sjCardX, sjCardY, sjCardW, sjCardH, 24);
+		ctx.stroke();
+	}
+
+	// ---- SLOT BADGE (Floating above SJ Card) ----
+	const slotText = slotLabel.toUpperCase();
+	ctx.font = 'bold 18px Fredoka, sans-serif';
+	const slotTextW = ctx.measureText(slotText).width;
+	const slotBadgeW = slotTextW + 60; // Padding
+	const slotBadgeX = PAD + 8; // Left aligned, inset from padding
+
+	// ---- DATE BADGE (Top Right) ----
+	ctx.save();
+	ctx.font = 'bold 14px Fredoka, sans-serif';
+	const DATE_BADGE_H = 28;
+	const dateTextW = ctx.measureText(reportDateText).width;
+	const dateBadgeW = dateTextW + 24; // Slightly smaller padding
+	const dateBadgeX = CANVAS_W - PAD - 8 - dateBadgeW; // Symmetrical inset from right padding
+	const dateBadgeY = slotBadgeY + (SLOT_BADGE_H - DATE_BADGE_H) / 2; // Center vertically with SLOT badge
+
+	// Shadow
+	ctx.fillStyle = '#2D2D2D';
+	roundRect(ctx, dateBadgeX + 3, dateBadgeY + 3, dateBadgeW, DATE_BADGE_H, 14);
+	ctx.fill();
+
+	// Background
+	ctx.fillStyle = '#FFFFFF';
+	roundRect(ctx, dateBadgeX, dateBadgeY, dateBadgeW, DATE_BADGE_H, 14); 
+	ctx.fill();
+
+	// Border
+	ctx.strokeStyle = '#2D2D2D';
+	ctx.lineWidth = 2.5;
+	roundRect(ctx, dateBadgeX, dateBadgeY, dateBadgeW, DATE_BADGE_H, 14);
+	ctx.stroke();
+
+	// Text
+	ctx.fillStyle = '#2D2D2D';
+	ctx.textAlign = 'center';
+	ctx.textBaseline = 'middle';
+	ctx.fillText(reportDateText, dateBadgeX + dateBadgeW / 2, dateBadgeY + DATE_BADGE_H / 2 - 1);
+	ctx.restore();
+
+	// Shadow
+	ctx.fillStyle = '#2D2D2D';
+	roundRect(ctx, slotBadgeX + 4, slotBadgeY + 4, slotBadgeW, SLOT_BADGE_H, 19);
+	ctx.fill();
+
+	ctx.fillStyle = '#4CAF50';
+	roundRect(ctx, slotBadgeX, slotBadgeY, slotBadgeW, SLOT_BADGE_H, 19); 
+	ctx.fill();
+	ctx.strokeStyle = '#2D2D2D';
+	ctx.lineWidth = 3;
+	roundRect(ctx, slotBadgeX, slotBadgeY, slotBadgeW, SLOT_BADGE_H, 19);
+	ctx.stroke();
+
+	ctx.fillStyle = '#FFFFFF';
+	ctx.textAlign = 'center';
+	ctx.textBaseline = 'middle';
+	ctx.fillText(slotText, slotBadgeX + slotBadgeW / 2, slotBadgeY + SLOT_BADGE_H / 2 - 1);
+
+	// ---- TABLE ----
+	const tableX = PAD;
+	const tableW = INNER_W;
+	// Make QTY and Success columns the same width, giving remaining space to the first column
+	const col2W = 195;
+	const col3W = 195;
+	const col1W = tableW - col2W - col3W; // 300
+
+	// Shadow
+	ctx.fillStyle = '#2D2D2D';
+	roundRect(ctx, tableX + 6, TABLE_TOP + 6, tableW, TABLE_H, 24);
+	ctx.fill();
+
+	// Draw table background
+	ctx.save();
+	roundRect(ctx, tableX, TABLE_TOP, tableW, TABLE_H, 24);
+	ctx.clip();
+
+	// Header background (covers both super header and header)
+	ctx.fillStyle = '#E3F2FD'; // Soft classy blue to contrast with the orange badge
+	ctx.fillRect(tableX, TABLE_TOP, tableW, SUPER_HEADER_H + HEADER_H);
+
+	ctx.fillStyle = '#2D2D2D';
+	ctx.textAlign = 'center';
+	ctx.textBaseline = 'middle';
+
+	// Super Header Text (centered in the full cell height)
+	ctx.font = 'bold 18px Fredoka, sans-serif';
+	const superHeaderTextY = TABLE_TOP + SUPER_HEADER_H / 2 - 1; 
+	ctx.fillText('Count of SPX Tracking Number', tableX + col1W / 2, superHeaderTextY);
+	// col2 and col3 are merged in the super header
+	ctx.fillText('Measurement Info', tableX + col1W + (col2W + col3W) / 2, superHeaderTextY);
+
+	// Header Text
+	ctx.font = 'bold 18px Fredoka, sans-serif';
+	const headerTextY = TABLE_TOP + SUPER_HEADER_H + HEADER_H / 2 - 1;
+	ctx.fillText('TO Number', tableX + col1W / 2, headerTextY);
+	ctx.fillText('Quantity', tableX + col1W + col2W / 2, headerTextY);
+	ctx.fillText('Success', tableX + col1W + col2W + col3W / 2, headerTextY);
+
+	// Data rows
+	let rowY = TABLE_TOP + SUPER_HEADER_H + HEADER_H;
+	measurementData.entries.forEach((entry, idx) => {
+		const isEven = idx % 2 === 0;
+		ctx.fillStyle = isEven ? '#FFF8E1' : '#FFFFFF';
+		ctx.fillRect(tableX, rowY, tableW, ROW_H);
+
+		ctx.fillStyle = '#2D2D2D';
+		ctx.font = '600 16px Fredoka, sans-serif';
+		ctx.textAlign = 'center'; // Center TO Number for symmetry
+		ctx.fillText(entry.toNumber, tableX + col1W / 2, rowY + ROW_H / 2 + 1);
+		ctx.fillText(String(entry.qty), tableX + col1W + col2W / 2, rowY + ROW_H / 2 + 1);
+		ctx.fillText(String(entry.success), tableX + col1W + col2W + col3W / 2, rowY + ROW_H / 2 + 1);
+
+		rowY += ROW_H;
+	});
+
+	// TOTAL row (yellow)
+	ctx.fillStyle = '#FFD966';
+	ctx.fillRect(tableX, rowY, tableW, ROW_H);
+	ctx.fillStyle = '#2D2D2D';
+	ctx.font = 'bold 18px Fredoka, sans-serif';
+	ctx.textAlign = 'center';
+	ctx.fillText('TOTAL', tableX + col1W / 2, rowY + ROW_H / 2 + 1);
+	ctx.fillText(String(measurementData.totalQty), tableX + col1W + col2W / 2, rowY + ROW_H / 2 + 1);
+	ctx.fillText(String(measurementData.totalSuccess), tableX + col1W + col2W + col3W / 2, rowY + ROW_H / 2 + 1);
+	rowY += ROW_H;
+
+	// Achievement row (green)
+	ctx.fillStyle = '#4CAF50';
+	ctx.fillRect(tableX, rowY, tableW, ROW_H);
+	ctx.fillStyle = '#FFFFFF';
+	ctx.font = 'bold 18px Fredoka, sans-serif';
+	ctx.textAlign = 'center';
+	ctx.fillText('Achievements', tableX + col1W / 2, rowY + ROW_H / 2 + 1);
+	const achievementText = measurementData.achievement.toFixed(2) + '%';
+	ctx.fillText(achievementText, tableX + col1W + (col2W + col3W) / 2, rowY + ROW_H / 2 + 1);
+
+	ctx.restore();
+
+	// Table grid lines
+	ctx.strokeStyle = '#2D2D2D';
+	ctx.lineWidth = 1.5;
+
+	// Horizontal lines
+	let lineY = TABLE_TOP + SUPER_HEADER_H; // line between super header and header
+	ctx.beginPath();
+	ctx.moveTo(tableX, lineY);
+	ctx.lineTo(tableX + tableW, lineY);
+	ctx.stroke();
+
+	lineY = TABLE_TOP + SUPER_HEADER_H + HEADER_H; // line between header and data
+	for (let i = 0; i <= dataRows + 2; i++) {
+		ctx.beginPath();
+		ctx.moveTo(tableX, lineY);
+		ctx.lineTo(tableX + tableW, lineY);
+		ctx.stroke();
+		lineY += ROW_H;
+	}
+
+	// Vertical lines
+	ctx.beginPath();
+	// line 1 (between col1 and col2) - goes all the way up and down
+	ctx.moveTo(tableX + col1W, TABLE_TOP);
+	ctx.lineTo(tableX + col1W, TABLE_TOP + TABLE_H);
+	ctx.stroke();
+
+	ctx.beginPath();
+	// line 2 (between col2 and col3) - starts below super header, stops before achievement
+	ctx.moveTo(tableX + col1W + col2W, TABLE_TOP + SUPER_HEADER_H);
+	ctx.lineTo(tableX + col1W + col2W, TABLE_TOP + SUPER_HEADER_H + HEADER_H + dataRows * ROW_H + ROW_H);
+	ctx.stroke();
+
+	// Table outer border again (on top of clip)
+	ctx.strokeStyle = '#2D2D2D';
+	ctx.lineWidth = 3;
+	roundRect(ctx, tableX, TABLE_TOP, tableW, TABLE_H, 24);
+	ctx.stroke();
+
+	// ---- MEASUREMENT INFO BADGE (Floating above Table) ----
+	const miText = 'MEASUREMENT INFO';
+	ctx.font = 'bold 18px Fredoka, sans-serif';
+	const miTextW = ctx.measureText(miText).width;
+	const miBadgeW = miTextW + 60; // Padding
+	const miBadgeX = PAD + 8; // Left aligned, inset from padding
+
+	// Shadow
+	ctx.fillStyle = '#2D2D2D';
+	roundRect(ctx, miBadgeX + 4, MI_BADGE_TOP + 4, miBadgeW, MI_BADGE_H, 19);
+	ctx.fill();
+
+	ctx.fillStyle = '#FF8C42';
+	roundRect(ctx, miBadgeX, MI_BADGE_TOP, miBadgeW, MI_BADGE_H, 19); 
+	ctx.fill();
+	ctx.strokeStyle = '#2D2D2D';
+	ctx.lineWidth = 3;
+	roundRect(ctx, miBadgeX, MI_BADGE_TOP, miBadgeW, MI_BADGE_H, 19);
+	ctx.stroke();
+
+	ctx.fillStyle = '#FFFFFF';
+	ctx.textAlign = 'center';
+	ctx.textBaseline = 'middle';
+	ctx.fillText(miText, miBadgeX + miBadgeW / 2, MI_BADGE_TOP + MI_BADGE_H / 2 - 1);
+
+	// ---- FOOTER BADGE ----
+	const footerText = hubName;
+	ctx.font = 'bold 20px Fredoka, sans-serif';
+	const footerTextW = ctx.measureText(footerText).width;
+	const FOOTER_BADGE_H = 44;
+	const footerBadgeW = footerTextW + 60; // Padding
+	const footerBadgeX = (CANVAS_W - footerBadgeW) / 2;
+	const footerBadgeY = CANVAS_H - FOOTER_BADGE_H - 16; // Mepet ke bawah (dekat dengan inner border)
+
+	// Shadow
+	ctx.fillStyle = '#2D2D2D';
+	roundRect(ctx, footerBadgeX + 4, footerBadgeY + 4, footerBadgeW, FOOTER_BADGE_H, 22);
+	ctx.fill();
+
+	// Background
+	ctx.fillStyle = '#FFFFFF';
+	roundRect(ctx, footerBadgeX, footerBadgeY, footerBadgeW, FOOTER_BADGE_H, 22); 
+	ctx.fill();
+
+	// Border
+	ctx.strokeStyle = '#2D2D2D';
+	ctx.lineWidth = 3;
+	roundRect(ctx, footerBadgeX, footerBadgeY, footerBadgeW, FOOTER_BADGE_H, 22);
+	ctx.stroke();
+
+	// Text
+	ctx.fillStyle = '#2D2D2D';
+	ctx.textAlign = 'center';
+	ctx.textBaseline = 'middle';
+	ctx.fillText(footerText, CANVAS_W / 2, footerBadgeY + FOOTER_BADGE_H / 2 - 1);
+
+	return canvas;
+}
+
+function openBulkyMeasurementModal() {
+	if (!bulkyMeasurementModal) return;
+	bulkyMeasurementModal.classList.remove('is-closing');
+	bulkyMeasurementModal.classList.add('open');
+	bulkyMeasurementModal.setAttribute('aria-hidden', 'false');
+	document.body.style.overflow = 'hidden';
+	if (typeof window._sfx?.modalOpen === 'function') window._sfx.modalOpen();
+}
+
+function closeBulkyMeasurementModal() {
+	if (!bulkyMeasurementModal) return;
+	bulkyMeasurementModal.classList.add('is-closing');
+	bulkyMeasurementModal.classList.remove('open');
+	if (typeof window._sfx?.modalClose === 'function') window._sfx.modalClose();
+	setTimeout(() => {
+		bulkyMeasurementModal.classList.remove('is-closing');
+		bulkyMeasurementModal.setAttribute('aria-hidden', 'true');
+		document.body.style.overflow = '';
+	}, 250);
+}
+
+async function generateBulkyMeasurementReport() {
+	// Validate
+	if (!dataset.length) {
+		setError('Upload file TO Management terlebih dahulu.');
+		return;
+	}
+
+	const trip = normalize(tripInput.value);
+	if (!trip) {
+		setError('Upload Surat Jalan terlebih dahulu untuk mendapatkan LT Number.');
+		return;
+	}
+
+	if (!selectedOperators.length) {
+		setError('Pilih operator bulky terlebih dahulu.');
+		return;
+	}
+
+	const toColIdx = getToNumberColumnIndex();
+	if (toColIdx === -1) {
+		setError('Kolom TO Number tidak ditemukan di file TO Management. Pastikan ada kolom "TO Number".');
+		return;
+	}
+
+	const measurementData = buildBulkyMeasurementData();
+	if (!measurementData || !measurementData.entries.length) {
+		setError('Tidak ada data TO Number ditemukan untuk operator yang dipilih.');
+		return;
+	}
+
+	setButtonLoading(generateBulkyMeasurementBtn, true, 'Generating...');
+	showProcessingToast(['Rendering Surat Jalan', 'Building Measurement Report']);
+
+	try {
+		// Render surat jalan PDF page to canvas
+		let sjCanvas = null;
+		try {
+			sjCanvas = await renderSuratJalanToCanvas();
+		} catch (err) {
+			console.warn('Could not render Surat Jalan:', err);
+		}
+
+		const slotLabel = `SLOT - ${getSlotTripNumber(slotSelect?.value)}`;
+		const hubName = getSelectedHubName();
+
+		let reportDateText = getIndonesianReportDateWithDayTitleCaseNatural();
+		if (reportDateText === '-') {
+			const [year, month, day] = getTodayInputDate().split('-');
+			const d = new Date(parseInt(year, 10), parseInt(month, 10) - 1, parseInt(day, 10));
+			const dayNames = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+			const monthNames = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+			reportDateText = `${dayNames[d.getDay()]}, ${parseInt(day, 10)} ${monthNames[parseInt(month, 10) - 1]} ${year}`;
+		}
+
+		// Draw the full report on canvas
+		const reportCanvas = drawBulkyMeasurementCanvas(sjCanvas, measurementData, slotLabel, hubName, reportDateText);
+		bmLastRenderedCanvas = reportCanvas;
+
+		// Show in modal preview
+		if (bmReportPreviewWrap) {
+			bmReportPreviewWrap.innerHTML = '';
+			bmReportPreviewWrap.appendChild(reportCanvas);
+		}
+
+		openBulkyMeasurementModal();
+		showReportSuccessToast(['Bulky Measurement Report generated']);
+	} catch (error) {
+		setError(`Gagal generate Bulky Measurement Report: ${error.message}`);
+		showReportErrorToast();
+	} finally {
+		setButtonLoading(generateBulkyMeasurementBtn, false);
+	}
+}
+
+function downloadBulkyMeasurementPng() {
+	if (!bmLastRenderedCanvas) {
+		setError('Generate report terlebih dahulu.');
+		return;
+	}
+
+	const slotNumber = getSlotTripNumber(slotSelect?.value);
+	const datePart = getSelectedReportDateFormatted() || formatDateDDMMYYYY(getTodayInputDate()) || 'report';
+	const fileName = `Bulky Measurement - Slot ${slotNumber} - ${datePart}.png`;
+
+	bmLastRenderedCanvas.toBlob((blob) => {
+		if (!blob) {
+			setError('Gagal membuat file PNG.');
+			return;
+		}
+
+		const url = URL.createObjectURL(blob);
+		const anchor = document.createElement('a');
+		anchor.href = url;
+		anchor.download = fileName;
+		document.body.appendChild(anchor);
+		anchor.click();
+		anchor.remove();
+		URL.revokeObjectURL(url);
+
+		showToast({
+			type: 'success',
+			title: 'Downloaded',
+			message: `${fileName} berhasil didownload.`,
+			duration: 3000
+		});
+	}, 'image/png');
+}
+
+async function copyBulkyMeasurementImage() {
+	if (!bmLastRenderedCanvas) {
+		setError('Generate report terlebih dahulu.');
+		return;
+	}
+
+	try {
+		const blob = await new Promise((resolve) => bmLastRenderedCanvas.toBlob(resolve, 'image/png'));
+		if (!blob) {
+			setError('Gagal membuat gambar untuk disalin.');
+			return;
+		}
+
+		await navigator.clipboard.write([
+			new ClipboardItem({ 'image/png': blob })
+		]);
+
+		showToast({
+			type: 'success',
+			title: 'Copied!',
+			message: 'Gambar report berhasil disalin ke clipboard.',
+			duration: 3000
+		});
+	} catch (err) {
+		console.error('Copy failed:', err);
+		setError('Gagal menyalin gambar. Pastikan browser mendukung fitur ini.');
+	}
+}
+
+// Event bindings
+if (generateBulkyMeasurementBtn) {
+	generateBulkyMeasurementBtn.addEventListener('click', generateBulkyMeasurementReport);
+}
+
+if (downloadBulkyMeasurementBtn) {
+	downloadBulkyMeasurementBtn.addEventListener('click', downloadBulkyMeasurementPng);
+}
+
+if (copyBulkyMeasurementBtn) {
+	copyBulkyMeasurementBtn.addEventListener('click', copyBulkyMeasurementImage);
+}
+
+if (closeBulkyMeasurementBtn) {
+	closeBulkyMeasurementBtn.addEventListener('click', closeBulkyMeasurementModal);
+}
+
+if (bulkyMeasurementModal) {
+	bulkyMeasurementModal.addEventListener('click', (e) => {
+		if (e.target === bulkyMeasurementModal) closeBulkyMeasurementModal();
+	});
+
+	document.addEventListener('keydown', (e) => {
+		if (e.key === 'Escape' && bulkyMeasurementModal.classList.contains('open')) {
+			closeBulkyMeasurementModal();
+		}
+	});
+}
+
+// Pre Alert Toggle
+// Prealert toggle removed, now handled by folder tabs
