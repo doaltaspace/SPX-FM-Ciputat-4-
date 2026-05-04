@@ -245,7 +245,7 @@
 								<!-- Extracted info rendered by JS -->
 							</div>
 							<div class="db-loaded-actions">
-								<button id="dbSjReplaceBtn" type="button" class="ghost-btn db-action-btn">Replace File</button>
+								<button id="dbSjCopyBtn" type="button" class="ghost-btn db-action-btn">📋 Copy</button>
 								<button id="dbSjClearBtn" type="button" class="ghost-btn db-action-btn db-action-danger">Remove</button>
 							</div>
 						</div>
@@ -681,22 +681,9 @@
 											<th style="padding: 10px 16px; font-weight: 800; border: 1.5px solid #2D2D2D !important; text-align: center;">Pickup success rate(%)</th>
 										</tr>
 									</thead>
-									<tbody style="color: #2D2D2D; font-weight: 600;">
+									<tbody id="pickupTableBody" style="color: #2D2D2D; font-weight: 600;">
 										<tr style="background: #FFFFFF;">
-											<td style="padding: 10px 16px; border: 1.5px solid #2D2D2D !important; text-align: left;">[784892]LUTHFI SAFLY PRATAMA</td>
-											<td style="padding: 10px 16px; border: 1.5px solid #2D2D2D !important; text-align: left;">BLINDVAN (4WH)</td>
-											<td style="padding: 10px 16px; border: 1.5px solid #2D2D2D !important; text-align: left;">DRIVER FM</td>
-											<td style="padding: 10px 16px; border: 1.5px solid #2D2D2D !important; text-align: center;">821</td>
-											<td style="padding: 10px 16px; border: 1.5px solid #2D2D2D !important; text-align: center;">7</td>
-											<td style="padding: 10px 16px; font-weight: 800; font-size: 14px; border: 1.5px solid #2D2D2D !important; text-align: center; color: #E53935;">97.6%</td>
-										</tr>
-										<tr style="background: #FFF8E1;">
-											<td style="padding: 10px 16px; border: 1.5px solid #2D2D2D !important; text-align: left;">[79477]MUHAMMAD IQBAL MONOARFA</td>
-											<td style="padding: 10px 16px; border: 1.5px solid #2D2D2D !important; text-align: left;">MOTORBIKE (2WH)</td>
-											<td style="padding: 10px 16px; border: 1.5px solid #2D2D2D !important; text-align: left;">RIDER FM</td>
-											<td style="padding: 10px 16px; border: 1.5px solid #2D2D2D !important; text-align: center;">50</td>
-											<td style="padding: 10px 16px; border: 1.5px solid #2D2D2D !important; text-align: center;">11</td>
-											<td style="padding: 10px 16px; font-weight: 800; font-size: 14px; border: 1.5px solid #2D2D2D !important; text-align: center; color: #43A047;">100.0%</td>
+											<td colspan="6" style="padding: 20px 16px; border: 1.5px solid #2D2D2D !important; text-align: center; color: #555;">Silakan upload data Pick Up Performance Report.</td>
 										</tr>
 									</tbody>
 								</table>
@@ -1045,7 +1032,7 @@
 			/* file choose / replace */
 			if(el.id==='chooseFileBtn'||el.id==='replaceFileBtn'){sfxUpload();return;}
 			/* database upload buttons */
-			if(el.id==='dbToChooseBtn'||el.id==='dbToAddMoreBtn'||el.id==='dbSjChooseBtn'||el.id==='dbSjReplaceBtn'||el.id==='dbOrderChooseBtn'||el.id==='dbOrderAddMoreBtn'||el.id==='dbPickupAssignChooseBtn'||el.id==='dbPickupAssignAddMoreBtn'||el.id==='dbPickupMgmtChooseBtn'||el.id==='dbPickupMgmtAddMoreBtn'||el.id==='dbPickupPerfChooseBtn'||el.id==='dbPickupPerfAddMoreBtn'){sfxUpload();return;}
+			if(el.id==='dbToChooseBtn'||el.id==='dbToAddMoreBtn'||el.id==='dbSjChooseBtn'||el.id==='dbSjCopyBtn'||el.id==='dbOrderChooseBtn'||el.id==='dbOrderAddMoreBtn'||el.id==='dbPickupAssignChooseBtn'||el.id==='dbPickupAssignAddMoreBtn'||el.id==='dbPickupMgmtChooseBtn'||el.id==='dbPickupMgmtAddMoreBtn'||el.id==='dbPickupPerfChooseBtn'||el.id==='dbPickupPerfAddMoreBtn'){sfxUpload();return;}
 			if(el.id==='dbSjClearBtn'){sfxDelete();return;}
 			/* database more toggle */
 			if(el.id==='dbMoreToggleBtn'){sfxToggle();return;}

@@ -1462,8 +1462,11 @@ function buildLinehaulReportTemplateText() {
 function buildBulkyReportTemplateText() {
 	const { slot } = getReportSelectionContext();
 	const slotNumber = getSlotTripNumber(slot);
-	const bulkyToCount = normalize(filteredDataEl?.textContent) || '0';
+	
+	const bulkyData = buildBulkyMeasurementData();
+	const bulkyToCount = bulkyData && bulkyData.entries ? bulkyData.entries.length : 0;
 	const bulkyTotalQtyValue = bulkyTotalQty || 0;
+	
 	const dateLabel = getIndonesianReportDateWithDayTitleCase();
 
 	return [
@@ -1493,16 +1496,16 @@ function buildPickupReportTemplateText() {
 	const hubName = getSelectedHubName();
 
 	return [
-		'*Pick Up Success Rate*',
-		`*${hubName}*`,
-		`*${dateLabel}*`,
+		'Pick Up Success Rate',
+		`${hubName}`,
+		`${dateLabel}`,
 		'',
 		'Thanks ya, Team.',
-		'Untuk yang *success rate-nya masih kurang*, yuk dibantu tingkatkan lagi dan dimaksimalkan follow up-nya di lapangan. Yang sudah *achieve*, tetap jaga konsistensinya ya biar performanya stabil.',
+		'Untuk yang *success rate-nya masih kurang*, dibantu ditingkatkan lagi ya. Yang sudah *achieve*, tetap jaga konsistensinya ya biar performanya stabil.',
 		'',
 		'Kalau ada kendala di lapangan, langsung infoin aja ya supaya bisa cepat dibantu cari solusinya.',
 		'',
-		'Terima kasih buat effort-nya, Team.🙏🏻🚀'
+		'Terima kasih buat effort-nya, Team.🙏🏻🚀 '
 	].join('\n');
 }
 
@@ -4427,7 +4430,7 @@ const dbToFileCount = document.getElementById('dbToFileCount');
 const dbSjFileInput = document.getElementById('dbSjFileInput');
 const dbSjDropzone = document.getElementById('dbSjDropzone');
 const dbSjChooseBtn = document.getElementById('dbSjChooseBtn');
-const dbSjReplaceBtn = document.getElementById('dbSjReplaceBtn');
+const dbSjCopyBtn = document.getElementById('dbSjCopyBtn');
 const dbSjClearBtn = document.getElementById('dbSjClearBtn');
 const dbSjLoadedFiles = document.getElementById('dbSjLoadedFiles');
 const dbSjFileCount = document.getElementById('dbSjFileCount');
@@ -4842,7 +4845,47 @@ function bindDatabaseUploadEvents() {
 	});
 
 	dbSjChooseBtn.addEventListener('click', (e) => { e.stopPropagation(); dbSjFileInput.click(); });
-	dbSjReplaceBtn.addEventListener('click', (e) => { e.stopPropagation(); dbSjFileInput.click(); });
+	dbSjCopyBtn.addEventListener('click', async (e) => {
+		e.stopPropagation();
+		if (!dbSjFile) {
+			showWarningToast('Upload Surat Jalan terlebih dahulu.');
+			return;
+		}
+		try {
+			dbSjCopyBtn.textContent = '⏳ Copying...';
+			dbSjCopyBtn.disabled = true;
+
+			// Render the full origin page at super-high resolution
+			const sjCanvas = await renderSuratJalanFullPageCanvas();
+			if (!sjCanvas) {
+				showWarningToast('Gagal merender halaman Surat Jalan.');
+				return;
+			}
+
+			const blob = await new Promise(resolve => sjCanvas.toBlob(resolve, 'image/png'));
+			if (!blob) {
+				showWarningToast('Gagal membuat gambar PNG.');
+				return;
+			}
+
+			await navigator.clipboard.write([
+				new ClipboardItem({ 'image/png': blob })
+			]);
+
+			showToast({
+				type: 'success',
+				title: 'Copied!',
+				message: 'Surat Jalan (Origin Hub) telah disalin ke clipboard.',
+				duration: 3000
+			});
+		} catch (err) {
+			console.error('Copy SJ error:', err);
+			showWarningToast('Gagal menyalin: ' + err.message);
+		} finally {
+			dbSjCopyBtn.textContent = '📋 Copy';
+			dbSjCopyBtn.disabled = false;
+		}
+	});
 	dbSjClearBtn.addEventListener('click', (e) => {
 		e.stopPropagation();
 		dbSjFile = null;
@@ -5087,6 +5130,9 @@ async function handleDbExtraFilesAdded(cardKey, fileList) {
 
 	await mergeAndLoadExtraFiles(cardKey);
 	renderDbExtraFiles(cardKey);
+	if (cardKey === 'pickupPerf') {
+		renderPickupPerformanceTable();
+	}
 
 	showToast({
 		type: 'success',
@@ -5144,10 +5190,136 @@ function bindDbExtraUploadCards() {
 					dbExtraFiles[key].splice(idx, 1);
 					await mergeAndLoadExtraFiles(key);
 					renderDbExtraFiles(key);
+					if (key === 'pickupPerf') {
+						renderPickupPerformanceTable();
+					}
 				}
 			});
 		}
 	}
+}
+
+function renderPickupPerformanceTable() {
+	const tbody = document.getElementById('pickupTableBody');
+	if (!tbody) return;
+
+	const { header, data } = dbExtraMergedData.pickupPerf;
+
+	if (!data || data.length === 0) {
+		tbody.innerHTML = `<tr><td colspan="6" style="padding: 20px 16px; border: 1.5px solid #2D2D2D !important; text-align: center; color: #555;">Silakan upload data Pick Up Performance Report.</td></tr>`;
+		return;
+	}
+
+	function findColIdx(keywords) {
+		for (const k of keywords) {
+			const lowerK = k.toLowerCase();
+			for (let i = 0; i < header.length; i++) {
+				const h = String(header[i] || '').toLowerCase().trim();
+				if (h.includes(lowerK)) return i;
+			}
+		}
+		return -1;
+	}
+
+	const driverIdIdx = findColIdx(['driver id', 'opsid', 'id driver']);
+	const driverNameIdx = findColIdx(['driver name', 'nama driver', 'driver']);
+	const vehicleTypeIdx = findColIdx(['vehicle type', 'tipe kendaraan', 'jenis kendaraan']);
+	const driverGroupIdx = findColIdx(['driver group', 'grup driver', 'group driver']);
+	const parcelsIdx = findColIdx(['parcels picked up', 'parcel picked up', 'jumlah paket', 'total parcels', 'parcel']);
+	const sellersIdx = findColIdx(['sellers picked up', 'seller picked up', 'jumlah seller', 'total sellers', 'seller']);
+	const successRateIdx = findColIdx(['success rate', 'tingkat keberhasilan', 'persentase sukses', '%', 'pickup success']);
+
+	let html = '';
+	let rowCount = 0;
+
+	for (let i = 0; i < data.length; i++) {
+		const row = data[i];
+		if (row.every(cell => !cell || String(cell).trim() === '')) continue;
+
+		let driverId = driverIdIdx !== -1 ? String(row[driverIdIdx] || '').trim() : '';
+		let driverName = driverNameIdx !== -1 ? String(row[driverNameIdx] || '').trim() : '';
+		
+		let driverDisplay = '';
+		if (driverId && driverName && driverId !== driverName) {
+			if (driverName.includes(driverId)) {
+				driverDisplay = driverName;
+			} else {
+				driverDisplay = `[${driverId}]${driverName}`;
+			}
+		} else if (driverName) {
+			driverDisplay = driverName;
+		} else {
+			driverDisplay = driverId || '-';
+		}
+
+		let vehicleType = vehicleTypeIdx !== -1 ? String(row[vehicleTypeIdx] || '').trim() || '-' : '-';
+		let driverGroup = driverGroupIdx !== -1 ? String(row[driverGroupIdx] || '').trim() || '-' : '-';
+		let parcels = parcelsIdx !== -1 ? String(row[parcelsIdx] || '').trim() || '0' : '0';
+		let sellers = sellersIdx !== -1 ? String(row[sellersIdx] || '').trim() || '0' : '0';
+
+		let parcelsNum = parseInt(parcels, 10);
+		let sellersNum = parseInt(sellers, 10);
+		if (isNaN(parcelsNum)) parcelsNum = 0;
+		if (isNaN(sellersNum)) sellersNum = 0;
+
+		// Filter out rows where both parcels and sellers are 0
+		if (parcelsNum === 0 && sellersNum === 0) {
+			continue;
+		}
+		
+		let successRateRaw = successRateIdx !== -1 ? (row[successRateIdx] || '') : '';
+		let successRateNum = 0;
+
+		if (successRateRaw === '' || successRateRaw === '-' || successRateRaw === null || successRateRaw === undefined) {
+			successRateRaw = '-';
+			successRateNum = -1;
+		} else if (typeof successRateRaw === 'number') {
+			successRateNum = successRateRaw <= 1 && successRateRaw > 0 ? successRateRaw * 100 : successRateRaw;
+			if (successRateRaw === 0) successRateNum = 0;
+			successRateRaw = successRateNum.toFixed(1) + '%';
+		} else {
+			let sRawStr = String(successRateRaw).trim();
+			let isPercentStr = sRawStr.includes('%');
+			sRawStr = sRawStr.replace('%', '').replace(',', '.').trim();
+			successRateNum = parseFloat(sRawStr);
+			if (isNaN(successRateNum)) {
+				successRateNum = -1;
+				successRateRaw = '-';
+			} else {
+				if (successRateNum <= 1 && successRateNum > 0 && !isPercentStr) {
+					successRateNum = successRateNum * 100;
+				}
+				successRateRaw = successRateNum.toFixed(1) + '%';
+			}
+		}
+
+		let rateColor = '#2D2D2D'; // < 98%
+		if (successRateNum >= 0) {
+			rateColor = '#E53935';
+			if (successRateNum >= 98 && successRateNum < 100) rateColor = '#F9A825';
+			if (successRateNum >= 100) rateColor = '#43A047';
+		}
+
+		const bg = rowCount % 2 === 0 ? '#FFFFFF' : '#FFF8E1';
+
+		html += `
+			<tr style="background: ${bg};">
+				<td style="padding: 10px 16px; border: 1.5px solid #2D2D2D !important; text-align: left;">${driverDisplay}</td>
+				<td style="padding: 10px 16px; border: 1.5px solid #2D2D2D !important; text-align: left;">${vehicleType}</td>
+				<td style="padding: 10px 16px; border: 1.5px solid #2D2D2D !important; text-align: left;">${driverGroup}</td>
+				<td style="padding: 10px 16px; border: 1.5px solid #2D2D2D !important; text-align: center;">${parcels}</td>
+				<td style="padding: 10px 16px; border: 1.5px solid #2D2D2D !important; text-align: center;">${sellers}</td>
+				<td style="padding: 10px 16px; font-weight: 800; font-size: 14px; border: 1.5px solid #2D2D2D !important; text-align: center; color: ${rateColor};">${successRateRaw}</td>
+			</tr>
+		`;
+		rowCount++;
+	}
+
+	if (rowCount === 0) {
+		html = `<tr><td colspan="6" style="padding: 20px 16px; border: 1.5px solid #2D2D2D !important; text-align: center; color: #555;">Tidak ada data valid dalam file.</td></tr>`;
+	}
+
+	tbody.innerHTML = html;
 }
 
 init();
@@ -5226,19 +5398,80 @@ async function renderSuratJalanToCanvas() {
 	for (let i = 1; i <= pdf.numPages; i++) {
 		const candidatePage = await pdf.getPage(i);
 		const textContent = await candidatePage.getTextContent();
-		const pageText = textContent.items.map(item => item.str).join(' ');
-		if (/Origin/i.test(pageText) && hubPdfPattern.test(pageText)) {
+		
+		// Group text items by Y coordinate to reconstruct visual lines
+		const lines = [];
+		for (const item of textContent.items) {
+			const y = Math.round(item.transform[5]);
+			// Allow small variance in Y for same line
+			let line = lines.find(l => Math.abs(l.y - y) <= 2);
+			if (!line) {
+				line = { y: y, items: [] };
+				lines.push(line);
+			}
+			line.items.push(item);
+		}
+
+		let isOriginPage = false;
+		for (const line of lines) {
+			// Sort items left-to-right
+			line.items.sort((a, b) => a.transform[4] - b.transform[4]);
+			const lineStr = line.items.map(item => item.str).join(' ');
+			
+			// Check if this visual line contains both "Origin" and our Hub Name
+			if (/Origin/i.test(lineStr) && hubPdfPattern.test(lineStr)) {
+				isOriginPage = true;
+				break;
+			}
+		}
+
+		if (isOriginPage) {
 			targetPageNumber = i;
 			break;
 		}
 	}
 
 	if (!targetPageNumber) {
+		// Fallback 1: Any line with Origin and First Mile Hub
+		for (let i = 1; i <= pdf.numPages; i++) {
+			const candidatePage = await pdf.getPage(i);
+			const textContent = await candidatePage.getTextContent();
+			
+			const lines = [];
+			for (const item of textContent.items) {
+				const y = Math.round(item.transform[5]);
+				let line = lines.find(l => Math.abs(l.y - y) <= 2);
+				if (!line) {
+					line = { y: y, items: [] };
+					lines.push(line);
+				}
+				line.items.push(item);
+			}
+
+			let isOriginPage = false;
+			for (const line of lines) {
+				line.items.sort((a, b) => a.transform[4] - b.transform[4]);
+				const lineStr = line.items.map(item => item.str).join(' ');
+				if (/Origin/i.test(lineStr) && /First\s*Mile\s*Hub/i.test(lineStr)) {
+					isOriginPage = true;
+					break;
+				}
+			}
+
+			if (isOriginPage) {
+				targetPageNumber = i;
+				break;
+			}
+		}
+	}
+
+	if (!targetPageNumber) {
+		// Fallback 2: Any page that has the hub name anywhere
 		for (let i = 1; i <= pdf.numPages; i++) {
 			const candidatePage = await pdf.getPage(i);
 			const textContent = await candidatePage.getTextContent();
 			const pageText = textContent.items.map(item => item.str).join(' ');
-			if (/Origin/i.test(pageText) && /First\s*Mile\s*Hub/i.test(pageText)) {
+			if (hubPdfPattern.test(pageText)) {
 				targetPageNumber = i;
 				break;
 			}
@@ -5255,6 +5488,106 @@ async function renderSuratJalanToCanvas() {
 	canvas.width = Math.floor(viewport.width);
 	canvas.height = Math.floor(viewport.height);
 	if (!context) return null;
+
+	await page.render({ canvasContext: context, viewport }).promise;
+	return canvas;
+}
+
+async function renderSuratJalanFullPageCanvas() {
+	const selectedFile = dbSjFile || prealertUploadedPdfFile || prealertPdfInput?.files?.[0];
+	if (!selectedFile) return null;
+
+	if (typeof pdfjsLib === 'undefined' || !pdfjsLib?.getDocument) return null;
+
+	if (pdfjsLib.GlobalWorkerOptions) {
+		pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+	}
+
+	const buffer = await selectedFile.arrayBuffer();
+	const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+
+	// Find the page where Origin = our Hub using same logic as renderSuratJalanToCanvas
+	let targetPageNumber = null;
+	const hubNameForPdf = getSelectedHubName();
+	const hubPdfPattern = new RegExp(hubNameForPdf.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s*'), 'i');
+
+	for (let i = 1; i <= pdf.numPages; i++) {
+		const candidatePage = await pdf.getPage(i);
+		const textContent = await candidatePage.getTextContent();
+		
+		const lines = [];
+		for (const item of textContent.items) {
+			const y = Math.round(item.transform[5]);
+			let line = lines.find(l => Math.abs(l.y - y) <= 2);
+			if (!line) {
+				line = { y: y, items: [] };
+				lines.push(line);
+			}
+			line.items.push(item);
+		}
+
+		let isOriginPage = false;
+		for (const line of lines) {
+			line.items.sort((a, b) => a.transform[4] - b.transform[4]);
+			const lineStr = line.items.map(item => item.str).join(' ');
+			if (/Origin/i.test(lineStr) && hubPdfPattern.test(lineStr)) {
+				isOriginPage = true;
+				break;
+			}
+		}
+
+		if (isOriginPage) {
+			targetPageNumber = i;
+			break;
+		}
+	}
+
+	if (!targetPageNumber) {
+		for (let i = 1; i <= pdf.numPages; i++) {
+			const candidatePage = await pdf.getPage(i);
+			const textContent = await candidatePage.getTextContent();
+			
+			const lines = [];
+			for (const item of textContent.items) {
+				const y = Math.round(item.transform[5]);
+				let line = lines.find(l => Math.abs(l.y - y) <= 2);
+				if (!line) {
+					line = { y: y, items: [] };
+					lines.push(line);
+				}
+				line.items.push(item);
+			}
+
+			let isOriginPage = false;
+			for (const line of lines) {
+				line.items.sort((a, b) => a.transform[4] - b.transform[4]);
+				const lineStr = line.items.map(item => item.str).join(' ');
+				if (/Origin/i.test(lineStr) && /First\s*Mile\s*Hub/i.test(lineStr)) {
+					isOriginPage = true;
+					break;
+				}
+			}
+
+			if (isOriginPage) {
+				targetPageNumber = i;
+				break;
+			}
+		}
+	}
+
+	if (!targetPageNumber) targetPageNumber = 1;
+
+	const page = await pdf.getPage(targetPageNumber);
+	// Super-high resolution scale for crystal-clear PNG output
+	const viewport = page.getViewport({ scale: 6.0 });
+	const canvas = document.createElement('canvas');
+	const context = canvas.getContext('2d', { alpha: false });
+	canvas.width = Math.floor(viewport.width);
+	canvas.height = Math.floor(viewport.height);
+	if (!context) return null;
+
+	context.imageSmoothingEnabled = true;
+	context.imageSmoothingQuality = 'high';
 
 	await page.render({ canvasContext: context, viewport }).promise;
 	return canvas;
@@ -5310,13 +5643,17 @@ function drawBulkyMeasurementCanvas(sjCanvas, measurementData, slotLabel, hubNam
 	const CANVAS_H = TABLE_BOTTOM + FOOTER_H + 20;
 	const SHADOW_OFFSET = 8; // For outer cartoon shadow
 
-	// Scale up by 3x for high-resolution output
-	const SCALE = 3;
+	// Scale up by 5x for super sharp high-resolution output
+	const SCALE = 5;
 	const canvas = document.createElement('canvas');
 	canvas.width = (CANVAS_W + SHADOW_OFFSET) * SCALE;
 	canvas.height = (CANVAS_H + SHADOW_OFFSET) * SCALE;
 	const ctx = canvas.getContext('2d');
 	ctx.scale(SCALE, SCALE);
+	
+	// Enable high-quality smoothing for the Surat Jalan PDF drawing
+	ctx.imageSmoothingEnabled = true;
+	ctx.imageSmoothingQuality = 'high';
 
 	// ---- OUTER SHADOW ----
 	ctx.fillStyle = '#2D2D2D';
@@ -5814,8 +6151,20 @@ const pickupTableContainer = document.getElementById('pickupTableContainer');
 async function generatePickupReportCanvas() {
 	if (!pickupTableContainer) return null;
 	try {
-		// Use html2canvas with scale 3 or 4 for super sharp quality
-		return await html2canvas(pickupTableContainer, { scale: 4, backgroundColor: null });
+		// Temporarily expand container to capture full width without clipping
+		const originalOverflowX = pickupTableContainer.style.overflowX;
+		const originalWidth = pickupTableContainer.style.width;
+		
+		pickupTableContainer.style.overflowX = 'visible';
+		pickupTableContainer.style.width = 'max-content';
+
+		const canvas = await html2canvas(pickupTableContainer, { scale: 4, backgroundColor: null });
+
+		// Restore original styles
+		pickupTableContainer.style.overflowX = originalOverflowX;
+		pickupTableContainer.style.width = originalWidth;
+
+		return canvas;
 	} catch (err) {
 		console.error("html2canvas error:", err);
 		return null;
