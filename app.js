@@ -6,8 +6,10 @@ let availableOperators = [];
 let availableTrips = [];
 let operatorColumnIndex = -1;
 let tripColumnIndex = -1;
+let quantityColumnIndex = -1;
 let massUploadData = [];
 let massUploadDraftData = [];
+let bulkyTotalQty = 0;
 let toastTimer = null;
 let toastHideTimer = null;
 let toolSwitchTimer = null;
@@ -189,6 +191,7 @@ const copyTrackingBtn = document.getElementById('copyTrackingBtn');
 const copyLinehaulReportBtn = document.getElementById('copyLinehaulReportBtn');
 const copyBulkyReportBtn = document.getElementById('copyBulkyReportBtn');
 const copyHourlyReportBtn = document.getElementById('copyHourlyReportBtn');
+const copyPickupReportTemplateBtn = document.getElementById('copyPickupReportTemplateBtn');
 
 const generateAllBtn = document.getElementById('generateAllBtn');
 const generateAllInlineBtn = document.getElementById('generateAllInlineBtn');
@@ -1432,7 +1435,8 @@ function buildLinehaulReportTemplateText() {
 	const dateLabel = getIndonesianReportDateWithDayTitleCaseNatural();
 
 	return [
-		`Daily Report ${getSelectedHubName()}`,
+		'Daily Report',
+		getSelectedHubName(),
 		dateLabel,
 		'',
 		`Slot : ${slotNumber}`,
@@ -1447,9 +1451,9 @@ function buildLinehaulReportTemplateText() {
 		`No Polisi : ${plateNumber}`,
 		`No Seal : ${sealCode}`,
 		`No. Linehaul Trip  : ${ltNumber}`,
-		`Qty Of To : ${totalToQty}`,
-		`Qty Of Parcel : ${orderQty}`,
-		`Hv To Quantity : ${hvQty}`,
+		`Qty of TO : ${totalToQty}`,
+		`Qty of Parcel : ${orderQty}`,
+		`HV TO Quantity : ${hvQty}`,
 		'',
 		'Terima-Kasih "Good-Luck"'
 	].join('\n');
@@ -1458,13 +1462,20 @@ function buildLinehaulReportTemplateText() {
 function buildBulkyReportTemplateText() {
 	const { slot } = getReportSelectionContext();
 	const slotNumber = getSlotTripNumber(slot);
-	const bulkyQty = getBulkyQtyFromReportData();
+	const bulkyToCount = normalize(filteredDataEl?.textContent) || '0';
+	const bulkyTotalQtyValue = bulkyTotalQty || 0;
 	const dateLabel = getIndonesianReportDateWithDayTitleCase();
 
 	return [
-		`Mass Upload Bulky ${getSelectedHubName()}`,
-		`Slot ${slotNumber} : ${bulkyQty}`,
-		dateLabel
+		'Mass Upload Bulky Measurement',
+		getSelectedHubName(),
+		dateLabel,
+		'',
+		`Slot : ${slotNumber}`,
+		`Total of TO Bulky  : ${bulkyToCount}`,
+		`Total of Qty Bulky : ${bulkyTotalQtyValue}`,
+		'',
+		'Terima-kasih~'
 	].join('\n');
 }
 
@@ -1474,6 +1485,24 @@ function buildHourlyReportTemplateText() {
 		'Hourly Performance Dialogue Dashboard',
 		`${getSelectedHubName()}`,
 		dateLabel
+	].join('\n');
+}
+
+function buildPickupReportTemplateText() {
+	const dateLabel = getIndonesianReportDateWithDayTitleCaseNatural();
+	const hubName = getSelectedHubName();
+
+	return [
+		'*Pick Up Success Rate*',
+		`*${hubName}*`,
+		`*${dateLabel}*`,
+		'',
+		'Thanks ya, Team.',
+		'Untuk yang *success rate-nya masih kurang*, yuk dibantu tingkatkan lagi dan dimaksimalkan follow up-nya di lapangan. Yang sudah *achieve*, tetap jaga konsistensinya ya biar performanya stabil.',
+		'',
+		'Kalau ada kendala di lapangan, langsung infoin aja ya supaya bisa cepat dibantu cari solusinya.',
+		'',
+		'Terima kasih buat effort-nya, Team.🙏🏻🚀'
 	].join('\n');
 }
 
@@ -1494,6 +1523,11 @@ async function copyReportTemplateText(templateType) {
 	if (templateType === 'hourly') {
 		text = buildHourlyReportTemplateText();
 		label = 'Hourly Report';
+	}
+
+	if (templateType === 'pickup') {
+		text = buildPickupReportTemplateText();
+		label = 'Pickup Report';
 	}
 
 	if (!text) {
@@ -2861,6 +2895,10 @@ function getColumnIndexByNames(columnNames) {
 	return -1;
 }
 
+function extractQuantityColumnIndexFromDataset() {
+	return getColumnIndexByNames(['Total Quantity', 'Quantity', 'Qty', 'Total Paket', 'Total Order Quantity', 'Total Qty']);
+}
+
 function extractUniqueOperatorsFromDataset() {
 	const index = getColumnIndexByNames(['Operator']);
 	if (index === -1) {
@@ -2937,6 +2975,8 @@ function resetOperatorState() {
 	selectedOperators = [];
 	availableOperators = [];
 	operatorColumnIndex = -1;
+	quantityColumnIndex = -1;
+	bulkyTotalQty = 0;
 	operatorInput.value = '';
 	updateOperatorDetectedCounter();
 	renderSelectedOperatorTags();
@@ -2956,6 +2996,7 @@ function rebuildOperatorOptionsFromDataset() {
 	const extracted = extractUniqueOperatorsFromDataset();
 	availableOperators = extracted.operators;
 	operatorColumnIndex = extracted.columnIndex;
+	quantityColumnIndex = extractQuantityColumnIndexFromDataset();
 
 	updateOperatorDetectedCounter();
 	renderOperatorDropdown();
@@ -3704,6 +3745,16 @@ function refreshPreview() {
 	animateStatValue(totalDataEl, byTrip.length);
 	animateStatValue(filteredDataEl, filteredRows.length);
 
+	// Calculate bulky total quantity
+	if (quantityColumnIndex !== -1) {
+		bulkyTotalQty = filteredRows.reduce((sum, row) => {
+			const val = Number.parseFloat(String(row[quantityColumnIndex] || '0').replace(/,/g, ''));
+			return sum + (Number.isNaN(val) ? 0 : val);
+		}, 0);
+	} else {
+		bulkyTotalQty = filteredRows.length; // fallback to count if no quantity column found
+	}
+
 	const statusMap = new Map();
 	byTrip.forEach((rowData) => {
 		const status = normalize(rowData[COL.TO_STATUS]) || 'Unknown';
@@ -4314,6 +4365,10 @@ function init() {
 
 	copyHourlyReportBtn?.addEventListener('click', () => {
 		copyReportTemplateText('hourly');
+	});
+
+	copyPickupReportTemplateBtn?.addEventListener('click', () => {
+		copyReportTemplateText('pickup');
 	});
 
 	copyTrackingBtn.addEventListener('click', () => {
@@ -5750,3 +5805,81 @@ if (bulkyMeasurementModal) {
 
 // Pre Alert Toggle
 // Prealert toggle removed, now handled by folder tabs
+
+// Pickup Report Export Logic
+const copyPickupReportBtn = document.getElementById('copyPickupReportBtn');
+const downloadPickupReportBtn = document.getElementById('downloadPickupReportBtn');
+const pickupTableContainer = document.getElementById('pickupTableContainer');
+
+async function generatePickupReportCanvas() {
+	if (!pickupTableContainer) return null;
+	try {
+		// Use html2canvas with scale 3 or 4 for super sharp quality
+		return await html2canvas(pickupTableContainer, { scale: 4, backgroundColor: null });
+	} catch (err) {
+		console.error("html2canvas error:", err);
+		return null;
+	}
+}
+
+if (copyPickupReportBtn) {
+	copyPickupReportBtn.addEventListener('click', async () => {
+		const btn = copyPickupReportBtn;
+		const originalText = btn.innerHTML;
+		btn.innerHTML = 'COPYING...';
+		btn.disabled = true;
+		
+		const canvas = await generatePickupReportCanvas();
+		if (!canvas) {
+			setError('Gagal membuat gambar untuk disalin.');
+			btn.innerHTML = originalText;
+			btn.disabled = false;
+			return;
+		}
+		
+		try {
+			const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+			await navigator.clipboard.write([
+				new ClipboardItem({ 'image/png': blob })
+			]);
+			showToast({ type: 'success', title: 'Copied!', message: 'Pickup Report disalin dengan kualitas super tajam.', duration: 3000 });
+		} catch (err) {
+			console.error('Copy failed:', err);
+			setError('Gagal menyalin. Pastikan browser mendukung fitur ini.');
+		}
+		btn.innerHTML = originalText;
+		btn.disabled = false;
+	});
+}
+
+if (downloadPickupReportBtn) {
+	downloadPickupReportBtn.addEventListener('click', async () => {
+		const btn = downloadPickupReportBtn;
+		const originalText = btn.innerHTML;
+		btn.innerHTML = 'DOWNLOADING...';
+		btn.disabled = true;
+
+		const canvas = await generatePickupReportCanvas();
+		if (!canvas) {
+			setError('Gagal membuat gambar untuk di-download.');
+			btn.innerHTML = originalText;
+			btn.disabled = false;
+			return;
+		}
+		
+		canvas.toBlob((blob) => {
+			const url = URL.createObjectURL(blob);
+			const a = document.createElement('a');
+			a.href = url;
+			a.download = `Pickup_Success_Rate_${getTodayInputDate()}.png`;
+			document.body.appendChild(a);
+			a.click();
+			document.body.removeChild(a);
+			URL.revokeObjectURL(url);
+			
+			showToast({ type: 'success', title: 'Downloaded', message: 'Pickup Report berhasil didownload.', duration: 3000 });
+			btn.innerHTML = originalText;
+			btn.disabled = false;
+		}, 'image/png');
+	});
+}

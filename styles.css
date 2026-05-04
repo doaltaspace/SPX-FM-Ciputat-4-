@@ -5026,3 +5026,12 @@ body.dark-mode .bulky-measurement-card .section-title {
 
 body.dark-mode .operator-header-actions .btn-view-all { background: #2A2A40; border-color: #555 !important; color: #FFF; box-shadow: 2px 2px 0 rgba(0,0,0,0.4); }
 body.dark-mode .operator-header-actions .btn-copy-spx { background: #FBC02D; border-color: #555 !important; color: #2D2D2D; box-shadow: 2px 2px 0 rgba(0,0,0,0.4); }
+
+/* -- Hide Scrollbar Utility -- */
+.hide-scrollbar {
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;  /* Firefox */
+}
+.hide-scrollbar::-webkit-scrollbar {
+    display: none;
+}
