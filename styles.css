@@ -1544,7 +1544,7 @@ body.dark-mode .db-dropzone-icon {
 
 .db-drop-title {
 	font-size: 14px;
-	font-weight: 700;
+	font-weight: 800;
 	text-transform: uppercase;
 	letter-spacing: 0.02em;
 	color: var(--text);
@@ -1562,7 +1562,7 @@ body.dark-mode .db-dropzone-icon {
 	white-space: nowrap;
 	padding: 8px 16px !important;
 	font-size: 12px !important;
-	font-weight: 700 !important;
+	font-weight: 800 !important;
 	border: var(--cartoon-border) !important;
 	border-radius: var(--radius-md) !important;
 	background: #FFFFFF !important;

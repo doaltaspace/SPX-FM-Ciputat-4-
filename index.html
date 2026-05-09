@@ -691,39 +691,26 @@
 						</div>
 
 						<!-- RETURN -->
-						<div id="folderContentReturn" style="display: none; margin-top: 24px; margin-bottom: 12px;">
-							<!-- Header row: Title on left, Pill on right -->
-							<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
-								<!-- Title -->
-								<div style="padding-left: 12px;">
-									<span style="font-family: 'Fredoka', sans-serif; font-style: normal; font-weight: 700; font-size: 16px; line-height: 18px; color: #000000; text-transform: uppercase;">DAILY REPORT RETURN</span>
-								</div>
-								
-								<!-- Operator Selector Pill -->
-								<div style="position: relative; z-index: 20;">
-									<div id="returnOperatorCombobox" class="operator-combobox token-input-wrapper" style="box-sizing: border-box; background: #FFFFFF; border: 2.5px solid #000000; box-shadow: 2px 2px 0px 0px #000000; border-radius: 33px; height: 30px; padding: 0 16px; min-width: 180px; display: flex; align-items: center; justify-content: center; cursor: text;">
-										<div id="returnSelectedOperatorTags" class="token-tags" style="display:none;"></div>
-										<input id="returnOperatorInput" type="text" placeholder="Nama Operator Return" autocomplete="off" class="token-input" style="background: transparent; border: none; font-family: 'Fredoka', sans-serif; font-style: normal; font-weight: 700; font-size: 12px; color: #000000; width: 100%; outline: none; text-align: center;" />
-										<div id="returnOperatorDropdown" class="operator-dropdown" style="top: 100%; margin-top: 8px;"></div>
-									</div>
-									<div id="returnOperatorDetectedCount" class="helper-text" style="display: none;"></div>
-								</div>
+						<div id="folderContentReturn" style="display: none; margin-top: 64px; position: relative; width: 100%; padding-top: 36px; padding-bottom: 24px;">
+							<!-- Title -->
+							<div style="position: absolute; top: -24px; left: 48px; font-family: 'Fredoka One', 'Fredoka', sans-serif; font-weight: 800; font-size: 28px; color: #000000; text-transform: uppercase; letter-spacing: 0.05em;">
+								DAILY REPORT RETURN
 							</div>
 
-							<!-- Inner Container -->
-							<div style="position: relative; box-sizing: border-box; background: #FFFFFF; border: 2.5px solid #000000; box-shadow: 4px 4px 0px 0px #000000; border-radius: 33px; padding: 24px 16px 16px 16px;">
+							<!-- Main Container -->
+							<div id="returnTableContainer" class="hide-scrollbar" style="position: relative; box-sizing: border-box; width: 100%; height: 260px; background: #FFFFFF; border: 3px solid #2D2D2D; box-shadow: 6px 6px 0px 0px #2D2D2D; border-radius: 36px; z-index: 1;">
 								
 								<style>
 									.return-action-btn {
 										box-sizing: border-box;
-										border: 2.5px solid #000000;
-										box-shadow: 2px 2px 0px 0px #000000;
-										border-radius: 33px;
-										height: 28px;
-										padding: 0 16px;
-										font-family: 'Fredoka', sans-serif;
+										border: 2.5px solid #2D2D2D;
+										box-shadow: 3px 3px 0px 0px #2D2D2D;
+										border-radius: 36px;
+										height: 32px;
+										padding: 0 20px;
+										font-family: 'Fredoka One', 'Fredoka', sans-serif;
 										font-weight: 700;
-										font-size: 11px;
+										font-size: 14px;
 										color: #000000;
 										cursor: pointer;
 										display: flex;
@@ -759,14 +746,28 @@
 									}
 								</style>
 
-								<!-- Action Buttons overlapping inner container top-right -->
-								<div style="position: absolute; top: -15px; right: 24px; display: flex; gap: 8px; z-index: 10;">
-									<button id="returnCopyBtn" type="button" class="return-action-btn">COPY</button>
-									<button id="returnDownloadBtn" type="button" class="return-action-btn">DOWNLOAD</button>
+								<!-- Top Bar (Dropdown & Action Buttons) overlapping top border -->
+								<div style="position: absolute; top: -18px; left: 0; width: 100%; display: flex; justify-content: space-between; padding: 0 32px; box-sizing: border-box; z-index: 10;">
+									
+									<!-- Left: Dropdown -->
+									<div style="position: relative; width: 220px;">
+										<div id="returnOperatorCombobox" class="operator-combobox token-input-wrapper" style="box-sizing: border-box; background: #FFFFFF; border: 2.5px solid #2D2D2D; box-shadow: 3px 3px 0px 0px #2D2D2D; border-radius: 36px; height: 32px; padding: 0 16px; width: 100%; display: flex; align-items: center; justify-content: center; cursor: text;">
+											<div id="returnSelectedOperatorTags" class="token-tags" style="display:none;"></div>
+											<input id="returnOperatorInput" type="text" placeholder="Nama Operator Return" autocomplete="off" class="token-input" style="background: transparent; border: none; font-family: 'Fredoka One', 'Fredoka', sans-serif; font-weight: 700; font-size: 14px; color: #000000; width: 100%; outline: none; text-align: center;" />
+											<div id="returnOperatorDropdown" class="operator-dropdown" style="top: 100%; margin-top: 8px;"></div>
+										</div>
+										<div id="returnOperatorDetectedCount" class="helper-text" style="display: none;"></div>
+									</div>
+
+									<!-- Right: Action Buttons -->
+									<div style="display: flex; gap: 12px;">
+										<button id="returnCopyBtn" type="button" class="return-action-btn">COPY</button>
+										<button id="returnDownloadBtn" type="button" class="return-action-btn">DOWNLOAD</button>
+									</div>
 								</div>
 
-								<!-- Pivot Table -->
-								<div id="returnTableContainer" class="hide-scrollbar" style="border: 2px solid #2D2D2D; border-radius: 12px; box-shadow: 4px 4px 0 #2D2D2D; margin-top: 12px; overflow: hidden; font-family: 'Fredoka', sans-serif; min-height: 100px;">
+								<!-- Table Body Wrap (to handle internal padding) -->
+								<div style="padding: 32px 24px; height: 100%; box-sizing: border-box; overflow: auto;" class="hide-scrollbar">
 									<table class="perfect-table" style="width: 100%; font-size: 13px; text-align: center; white-space: nowrap;">
 										<thead>
 											<tr style="background: #FCD15A; color: #2D2D2D; text-transform: uppercase;">
@@ -787,7 +788,7 @@
 							<div style="margin-top: 64px; position: relative; width: 100%; padding-top: 36px; padding-bottom: 24px;">
 								
 								<!-- Title -->
-								<div style="position: absolute; top: 0; right: 24px; font-family: 'Fredoka One', 'Fredoka', sans-serif; font-size: 20px; color: #000000; text-transform: uppercase;">
+								<div style="position: absolute; top: -24px; right: 32px; font-family: 'Fredoka One', 'Fredoka', sans-serif; font-weight: 800; font-size: 28px; color: #000000; text-transform: uppercase; letter-spacing: 0.05em;">
 									SELLER REPORT RETURN
 								</div>
 
@@ -801,7 +802,7 @@
 										<div style="display: flex; gap: 12px;">
 											<!-- Nama Seller -->
 											<div style="position: relative; width: 220px;">
-												<select id="sellerNameSelect" style="box-sizing: border-box; width: 100%; height: 36px; background: #FFFFFF; border: 2.5px solid #2D2D2D; box-shadow: 3px 3px 0px #2D2D2D; border-radius: 36px; padding: 0 16px; font-family: 'Fredoka One', 'Fredoka', sans-serif; font-weight: 400; font-size: 14px; cursor: pointer; outline: none; appearance: none;">
+								<select id="sellerNameSelect" style="box-sizing: border-box; width: 100%; height: 32px; background: #FFFFFF; border: 2.5px solid #2D2D2D; box-shadow: 3px 3px 0px #2D2D2D; border-radius: 36px; padding: 0 16px; font-family: 'Fredoka One', 'Fredoka', sans-serif; font-weight: 700; font-size: 14px; cursor: pointer; outline: none; appearance: none;">
 													<option value="Pergudangan">Pergudangan</option>
 													<option value="Lainnya">Lainnya...</option>
 												</select>
@@ -810,7 +811,7 @@
 
 											<!-- Nama Driver -->
 											<div style="position: relative; width: 220px;">
-												<select id="driverNameSelect" style="box-sizing: border-box; width: 100%; height: 36px; background: #FFFFFF; border: 2.5px solid #2D2D2D; box-shadow: 3px 3px 0px #2D2D2D; border-radius: 36px; padding: 0 16px; font-family: 'Fredoka One', 'Fredoka', sans-serif; font-weight: 400; font-size: 14px; cursor: pointer; outline: none; appearance: none;">
+												<select id="driverNameSelect" style="box-sizing: border-box; width: 100%; height: 32px; background: #FFFFFF; border: 2.5px solid #2D2D2D; box-shadow: 3px 3px 0px #2D2D2D; border-radius: 36px; padding: 0 16px; font-family: 'Fredoka One', 'Fredoka', sans-serif; font-weight: 700; font-size: 14px; cursor: pointer; outline: none; appearance: none;">
 													<option value="">Nama Driver</option>
 													<option value="[1140631] ODE ENDE">[1140631] ODE ENDE</option>
 													<option value="[785837] KIKI MARDIANSYAH">[785837] KIKI MARDIANSYAH</option>
@@ -821,15 +822,14 @@
 
 										<!-- Right: Action Buttons -->
 										<div style="display: flex; gap: 12px;">
-											<button id="sellerReturnViewBtn" type="button" style="box-sizing: border-box; padding: 0 20px; height: 36px; background: #D4E6FF; border: 2.5px solid #2D2D2D; box-shadow: 3px 3px 0px #2D2D2D; border-radius: 36px; font-family: 'Fredoka One', 'Fredoka', sans-serif; font-size: 14px; color: #000000; cursor: pointer;">View</button>
-											<button id="sellerReturnCopyBtn" type="button" style="box-sizing: border-box; padding: 0 20px; height: 36px; background: #FFC93C; border: 2.5px solid #2D2D2D; box-shadow: 3px 3px 0px #2D2D2D; border-radius: 36px; font-family: 'Fredoka One', 'Fredoka', sans-serif; font-size: 14px; color: #000000; cursor: pointer;">Copy</button>
-											<button id="sellerReturnDownloadBtn" type="button" style="box-sizing: border-box; padding: 0 20px; height: 36px; background: #98FF75; border: 2.5px solid #2D2D2D; box-shadow: 3px 3px 0px #2D2D2D; border-radius: 36px; font-family: 'Fredoka One', 'Fredoka', sans-serif; font-size: 14px; color: #000000; cursor: pointer;">Download</button>
+											<button id="sellerReturnViewBtn" type="button" style="box-sizing: border-box; padding: 0 20px; height: 32px; background: #D4E6FF; border: 2.5px solid #2D2D2D; box-shadow: 3px 3px 0px #2D2D2D; border-radius: 36px; font-family: 'Fredoka One', 'Fredoka', sans-serif; font-weight: 700; font-size: 14px; color: #000000; cursor: pointer;">VIEW</button>
+											<button id="sellerReturnDownloadBtn" type="button" style="box-sizing: border-box; padding: 0 20px; height: 32px; background: #98FF75; border: 2.5px solid #2D2D2D; box-shadow: 3px 3px 0px #2D2D2D; border-radius: 36px; font-family: 'Fredoka One', 'Fredoka', sans-serif; font-weight: 700; font-size: 14px; color: #000000; cursor: pointer;">DOWNLOAD</button>
 										</div>
 									</div>
 
 									<!-- Generate Email Button overlapping bottom-right border -->
-									<div style="position: absolute; bottom: -18px; right: 32px; z-index: 10;">
-										<button id="sellerReturnGenerateEmailBtn" type="button" style="box-sizing: border-box; padding: 0 32px; height: 36px; background: #FF6A00; border: 2.5px solid #2D2D2D; box-shadow: 3px 3px 0px #2D2D2D; border-radius: 36px; font-family: 'Fredoka One', 'Fredoka', sans-serif; font-size: 15px; color: #000000; cursor: pointer; filter: drop-shadow(0px 4px 4px rgba(0, 0, 0, 0.25));">Generate Email</button>
+									<div style="position: absolute; bottom: -16px; right: 32px; z-index: 10;">
+										<button id="sellerReturnGenerateEmailBtn" type="button" style="box-sizing: border-box; padding: 0 32px; height: 32px; background: #FF6A00; border: 2.5px solid #2D2D2D; box-shadow: 3px 3px 0px #2D2D2D; border-radius: 36px; font-family: 'Fredoka One', 'Fredoka', sans-serif; font-weight: 700; font-size: 15px; color: #000000; cursor: pointer; filter: drop-shadow(0px 4px 4px rgba(0, 0, 0, 0.25));">Generate Email</button>
 									</div>
 								</div>
 							</div>

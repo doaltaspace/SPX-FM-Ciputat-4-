@@ -203,7 +203,6 @@ const sellerNameSelect = document.getElementById('sellerNameSelect');
 const sellerNameCustomInput = document.getElementById('sellerNameCustomInput');
 const driverNameSelect = document.getElementById('driverNameSelect');
 const sellerReturnViewBtn = document.getElementById('sellerReturnViewBtn');
-const sellerReturnCopyBtn = document.getElementById('sellerReturnCopyBtn');
 const sellerReturnDownloadBtn = document.getElementById('sellerReturnDownloadBtn');
 const sellerReturnGenerateEmailBtn = document.getElementById('sellerReturnGenerateEmailBtn');
 
