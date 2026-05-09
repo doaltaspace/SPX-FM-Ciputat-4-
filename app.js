@@ -4,6 +4,9 @@ let activeTool = 'mass';
 let selectedOperators = [];
 let availableOperators = [];
 let availableTrips = [];
+let returnSelectedOperators = [];
+let returnAvailableOperators = [];
+let returnOperatorColumnIndex = -1;
 let operatorColumnIndex = -1;
 let tripColumnIndex = -1;
 let quantityColumnIndex = -1;
@@ -186,6 +189,23 @@ const operatorDropdown = document.getElementById('operatorDropdown');
 const selectedOperatorTags = document.getElementById('selectedOperatorTags');
 const operatorDetectedCount = document.getElementById('operatorDetectedCount');
 const tripDetectedCount = document.getElementById('tripDetectedCount');
+const returnOperatorInput = document.getElementById('returnOperatorInput');
+const returnOperatorCombobox = document.getElementById('returnOperatorCombobox');
+const returnOperatorDropdown = document.getElementById('returnOperatorDropdown');
+const returnSelectedOperatorTags = document.getElementById('returnSelectedOperatorTags');
+const returnOperatorDetectedCount = document.getElementById('returnOperatorDetectedCount');
+const returnCopyBtn = document.getElementById('returnCopyBtn');
+const returnDownloadBtn = document.getElementById('returnDownloadBtn');
+const returnTableBody = document.getElementById('returnTableBody');
+const returnTableContainer = document.getElementById('returnTableContainer');
+
+const sellerNameSelect = document.getElementById('sellerNameSelect');
+const sellerNameCustomInput = document.getElementById('sellerNameCustomInput');
+const driverNameSelect = document.getElementById('driverNameSelect');
+const sellerReturnViewBtn = document.getElementById('sellerReturnViewBtn');
+const sellerReturnCopyBtn = document.getElementById('sellerReturnCopyBtn');
+const sellerReturnDownloadBtn = document.getElementById('sellerReturnDownloadBtn');
+const sellerReturnGenerateEmailBtn = document.getElementById('sellerReturnGenerateEmailBtn');
 
 const copyTrackingBtn = document.getElementById('copyTrackingBtn');
 const copyLinehaulReportBtn = document.getElementById('copyLinehaulReportBtn');
@@ -3164,6 +3184,274 @@ function closeOperatorDropdown() {
 	operatorDropdown.classList.remove('open');
 }
 
+function updateReturnOperatorDetectedCounter() {
+	if (!returnOperatorDetectedCount) {
+		return;
+	}
+	returnOperatorDetectedCount.textContent = `Operators detected: ${returnAvailableOperators.length}`;
+}
+
+function getReturnHeaderIndexByKeywords(header, keywords) {
+	const lowerHeader = header.map((value) => String(value || '').toLowerCase().trim());
+	for (const keyword of keywords) {
+		const normalizedKeyword = String(keyword || '').toLowerCase().trim();
+		if (!normalizedKeyword) {
+			continue;
+		}
+		for (let i = 0; i < lowerHeader.length; i += 1) {
+			if (lowerHeader[i].includes(normalizedKeyword)) {
+				return i;
+			}
+		}
+	}
+	return -1;
+}
+
+function resetReturnOperatorState() {
+	returnSelectedOperators = [];
+	returnAvailableOperators = [];
+	returnOperatorColumnIndex = -1;
+	if (returnOperatorInput) {
+		returnOperatorInput.value = '';
+	}
+	updateReturnOperatorDetectedCounter();
+	renderReturnOperatorTags();
+	renderReturnOperatorDropdown();
+}
+
+function renderReturnOperatorTags() {
+	if (!returnSelectedOperatorTags) {
+		return;
+	}
+	returnSelectedOperatorTags.innerHTML = '';
+
+	returnSelectedOperators.forEach((operator) => {
+		const tag = document.createElement('span');
+		tag.className = 'selected-tag';
+		tag.textContent = operator;
+
+		const removeBtn = document.createElement('button');
+		removeBtn.type = 'button';
+		removeBtn.className = 'tag-remove';
+		removeBtn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11" fill="#FF4D4D" stroke="#2D2D2D" stroke-width="2"/><path d="M15 9L9 15M9 9l6 6" stroke="#2D2D2D" stroke-width="2.5" stroke-linecap="round"/></svg>';
+		removeBtn.addEventListener('click', () => {
+			returnSelectedOperators = returnSelectedOperators.filter((item) => item !== operator);
+			renderReturnOperatorTags();
+			renderReturnOperatorDropdown();
+			generateReturnPivot();
+		});
+
+		tag.appendChild(removeBtn);
+		returnSelectedOperatorTags.appendChild(tag);
+	});
+}
+
+function renderReturnOperatorDropdown() {
+	if (!returnOperatorInput || !returnOperatorDropdown) {
+		return;
+	}
+	const keyword = normalize(returnOperatorInput.value).toLowerCase();
+	const shouldOpen = document.activeElement === returnOperatorInput || Boolean(keyword);
+	if (!shouldOpen) {
+		returnOperatorDropdown.classList.remove('open');
+		return;
+	}
+
+	const filtered = returnAvailableOperators.filter((operator) => {
+		return operator.toLowerCase().includes(keyword) && !returnSelectedOperators.includes(operator);
+	});
+
+	returnOperatorDropdown.innerHTML = '';
+	if (!filtered.length) {
+		const empty = document.createElement('div');
+		empty.className = 'operator-option-empty';
+		empty.textContent = returnOperatorColumnIndex === -1
+			? 'File Receive Management belum diunggah atau kolom Operator tidak ditemukan.'
+			: returnAvailableOperators.length
+				? 'Operator tidak ditemukan.'
+				: 'Belum ada operator terdeteksi dari dataset.';
+		returnOperatorDropdown.appendChild(empty);
+		returnOperatorDropdown.classList.add('open');
+		return;
+	}
+
+	filtered.forEach((operator) => {
+		const option = document.createElement('button');
+		option.type = 'button';
+		option.className = 'operator-option';
+		option.textContent = operator;
+		option.addEventListener('click', () => {
+			returnSelectedOperators.push(operator);
+			returnOperatorInput.value = '';
+			renderReturnOperatorTags();
+			renderReturnOperatorDropdown();
+			generateReturnPivot();
+			returnOperatorInput.focus();
+		});
+		returnOperatorDropdown.appendChild(option);
+	});
+
+	returnOperatorDropdown.classList.add('open');
+}
+
+function closeReturnOperatorDropdown() {
+	returnOperatorDropdown?.classList.remove('open');
+}
+
+function setReturnTableMessage(message) {
+	if (!returnTableBody) {
+		return;
+	}
+	returnTableBody.innerHTML = `
+		<tr>
+			<td colspan="2" style="padding: 20px 16px; border: 1.5px solid #2D2D2D; text-align: center; color: #555;">
+				${escapeHtml(message)}
+			</td>
+		</tr>
+	`;
+}
+
+function renderReturnPivotRows(rows, grandTotal) {
+	if (!returnTableBody) {
+		return;
+	}
+	let html = '';
+	rows.forEach((row, index) => {
+		const isEven = index % 2 === 0;
+		const bg = isEven ? '#FFFFFF' : '#E3F2FD';
+		const safeCount = Number.isFinite(row.count) ? row.count : 0;
+		html += `
+			<tr style="background: ${bg};">
+				<td style="padding: 10px 16px; border: 1.5px solid #2D2D2D; text-align: left; font-weight: 700;">${escapeHtml(row.status)}</td>
+				<td style="padding: 10px 16px; border: 1.5px solid #2D2D2D; text-align: right; font-weight: 800;">${safeCount.toLocaleString('id-ID')}</td>
+			</tr>
+		`;
+	});
+	const grandBg = '#B3E5FC';
+	html += `
+		<tr style="background: ${grandBg};">
+			<td style="padding: 10px 16px; border: 1.5px solid #2D2D2D; text-align: left; font-weight: 800;">Grand Total</td>
+			<td style="padding: 10px 16px; border: 1.5px solid #2D2D2D; text-align: right; font-weight: 800;">${grandTotal.toLocaleString('id-ID')}</td>
+		</tr>
+	`;
+	returnTableBody.innerHTML = html;
+}
+
+function generateReturnPivot() {
+	const receiveData = dbExtraMergedData?.receiveMgmt;
+	if (!receiveData || !receiveData.data || receiveData.data.length === 0) {
+		setReturnTableMessage('Silakan upload data Receive Management dan pilih Operator.');
+		return;
+	}
+
+	const header = receiveData.header || [];
+	const operatorIndex = returnOperatorColumnIndex !== -1
+		? returnOperatorColumnIndex
+		: getReturnHeaderIndexByKeywords(header, ['operator', 'opsid', 'ops id', 'nama operator', 'operator name', 'ops']);
+	const statusIndex = getReturnHeaderIndexByKeywords(header, ['order status', 'status order', 'status', 'order_status', 'status order']);
+	const trackingIndex = getReturnHeaderIndexByKeywords(header, ['spx tracking number', 'tracking number', 'resi', 'no resi', 'spx tracking']);
+
+	const missing = [];
+	if (operatorIndex === -1) missing.push('Operator');
+	if (statusIndex === -1) missing.push('Order Status');
+	if (trackingIndex === -1) missing.push('SPX Tracking Number');
+	if (missing.length) {
+		setReturnTableMessage(`Kolom ${missing.join(', ')} tidak ditemukan di Receive Management.`);
+		return;
+	}
+
+	// Filter data by "Return_" prefix and operator selection
+	const statusPrefix = "Return_";
+	let filtered = receiveData.data.filter(row => {
+		const status = normalize(row[statusIndex]);
+		return status.startsWith(statusPrefix);
+	});
+
+	if (returnSelectedOperators.length) {
+		const selectedSet = new Set(returnSelectedOperators.map(op => normalize(op)));
+		filtered = filtered.filter(row => selectedSet.has(normalize(row[operatorIndex])));
+	}
+
+	if (!filtered.length) {
+		setReturnTableMessage('Tidak ada data return yang ditemukan.');
+		return;
+	}
+
+	const statusMap = new Map();
+	filtered.forEach((row) => {
+		const tracking = normalize(row[trackingIndex]);
+		if (!tracking) {
+			return;
+		}
+		const status = normalize(row[statusIndex]) || 'Unknown';
+		if (!statusMap.has(status)) {
+			statusMap.set(status, new Set());
+		}
+		statusMap.get(status).add(tracking);
+	});
+
+	if (!statusMap.size) {
+		setReturnTableMessage('Tidak ada tracking number valid untuk operator terpilih.');
+		return;
+	}
+
+	const rows = Array.from(statusMap.entries())
+		.map(([status, trackingSet]) => ({ status, count: trackingSet.size }))
+		.sort((a, b) => b.count - a.count || a.status.localeCompare(b.status));
+
+	const grandTotal = rows.reduce((sum, row) => sum + row.count, 0);
+	renderReturnPivotRows(rows, grandTotal);
+}
+
+function rebuildReturnOperatorOptionsFromReceiveMgmt() {
+	const receiveData = dbExtraMergedData?.receiveMgmt;
+	if (!receiveData || !receiveData.data || receiveData.data.length === 0) {
+		resetReturnOperatorState();
+		setReturnTableMessage('Silakan upload data Receive Management dan pilih Operator.');
+		return;
+	}
+
+	const operatorIndex = getReturnHeaderIndexByKeywords(receiveData.header || [], [
+		'operator',
+		'opsid',
+		'ops id',
+		'nama operator',
+		'operator name',
+		'ops'
+	]);
+	returnOperatorColumnIndex = operatorIndex;
+
+	if (operatorIndex === -1) {
+		returnAvailableOperators = [];
+		returnSelectedOperators = [];
+		updateReturnOperatorDetectedCounter();
+		renderReturnOperatorTags();
+		renderReturnOperatorDropdown();
+		setReturnTableMessage('Kolom Operator tidak ditemukan di Receive Management.');
+		return;
+	}
+
+	const statusIndex = getReturnHeaderIndexByKeywords(receiveData.header || [], ['order status', 'status order', 'status', 'order_status', 'status order']);
+	const statusPrefix = "Return_";
+
+	const operators = Array.from(
+		new Set(
+			receiveData.data
+				.filter(row => normalize(row[statusIndex]).startsWith(statusPrefix))
+				.map((row) => normalize(row[operatorIndex]))
+				.filter(Boolean)
+		)
+	);
+
+	returnAvailableOperators = operators;
+	returnSelectedOperators = returnSelectedOperators.filter((operator) => returnAvailableOperators.includes(operator));
+	updateReturnOperatorDetectedCounter();
+	renderReturnOperatorTags();
+	renderReturnOperatorDropdown();
+	
+	generateReturnPivot();
+}
+
 function clearSourceFile() {
 	dataset = [];
 	headerRow = [];
@@ -3226,7 +3514,10 @@ async function loadFile(file) {
 async function parseExcel(file) {
 	const buffer = await file.arrayBuffer();
 	const workbook = XLSX.read(buffer, { type: 'array' });
-	const sheetName = workbook.SheetNames[0];
+	let sheetName = workbook.SheetNames.find(n => n.toLowerCase() === 'all');
+	if (!sheetName) {
+		sheetName = workbook.SheetNames[0];
+	}
 	const sheet = workbook.Sheets[sheetName];
 	return XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
 }
@@ -4015,6 +4306,8 @@ function init() {
 	updateTripDetectedCounter();
 	setTripDropdownOptions([]);
 	renderSelectedOperatorTags();
+	renderReturnOperatorTags();
+	updateReturnOperatorDetectedCounter();
 	refreshPreview();
 	updateReportSummary();
 	bindUploadEvents();
@@ -4118,6 +4411,25 @@ function init() {
 		downloadPrealertFirstPageJpg();
 	});
 
+	if (sellerNameSelect && sellerNameCustomInput) {
+		sellerNameSelect.addEventListener('change', () => {
+			if (sellerNameSelect.value === 'Lainnya') {
+				sellerNameCustomInput.style.display = 'block';
+			} else {
+				sellerNameCustomInput.style.display = 'none';
+				sellerNameCustomInput.value = '';
+			}
+		});
+	}
+
+	sellerReturnDownloadBtn?.addEventListener('click', () => {
+		generateSellerReturnExcel();
+	});
+
+	sellerReturnGenerateEmailBtn?.addEventListener('click', () => {
+		generateSellerReturnEmail();
+	});
+
 	tabMassUpload.addEventListener('click', () => setActiveTool('mass'));
 	tabTOReport.addEventListener('click', () => setActiveTool('to'));
 
@@ -4139,9 +4451,35 @@ function init() {
 		}
 	});
 
+	if (returnOperatorInput) {
+		returnOperatorInput.addEventListener('input', renderReturnOperatorDropdown);
+		returnOperatorInput.addEventListener('focus', renderReturnOperatorDropdown);
+		returnOperatorInput.addEventListener('keydown', (event) => {
+			if (event.key === 'Enter') {
+				event.preventDefault();
+				const first = returnOperatorDropdown?.querySelector('.operator-option');
+				if (first) {
+					first.click();
+				}
+			}
+		});
+	}
+
+	if (returnOperatorCombobox) {
+		returnOperatorCombobox.addEventListener('click', (event) => {
+			if (event.target === returnOperatorCombobox || event.target === returnSelectedOperatorTags) {
+				returnOperatorInput?.focus();
+			}
+		});
+	}
+
+
 	document.addEventListener('click', (event) => {
 		if (!operatorCombobox.contains(event.target)) {
 			closeOperatorDropdown();
+		}
+		if (returnOperatorCombobox && !returnOperatorCombobox.contains(event.target)) {
+			closeReturnOperatorDropdown();
 		}
 		if (!tripCombobox.contains(event.target)) {
 			closeTripDropdown();
@@ -4945,7 +5283,8 @@ const dbExtraFiles = {
 	pickupAssign: [],
 	pickupMgmt: [],
 	pickupPerf: [],
-	receiveMgmt: []
+	receiveMgmt: [],
+	returnAssign: []
 };
 
 // Merged/parsed data for each extra card (Dynamic Header Matching)
@@ -4954,7 +5293,8 @@ const dbExtraMergedData = {
 	pickupAssign: { header: [], data: [] },
 	pickupMgmt: { header: [], data: [] },
 	pickupPerf: { header: [], data: [] },
-	receiveMgmt: { header: [], data: [] }
+	receiveMgmt: { header: [], data: [] },
+	returnAssign: { header: [], data: [] }
 };
 
 async function mergeAndLoadExtraFiles(cardKey) {
@@ -4974,8 +5314,19 @@ async function mergeAndLoadExtraFiles(cardKey) {
 
 			if (!aoa.length || aoa.length < 2) continue;
 
-			const fileHeader = aoa[0].map(h => String(h || '').trim());
-			const fileData = aoa.slice(1);
+			// Find actual header row (row with most non-empty columns in the first 15 rows)
+			let headerIndex = 0;
+			let maxCols = 0;
+			for (let i = 0; i < Math.min(15, aoa.length); i++) {
+				const cols = aoa[i].filter(c => String(c).trim() !== '').length;
+				if (cols > maxCols) {
+					maxCols = cols;
+					headerIndex = i;
+				}
+			}
+
+			const fileHeader = aoa[headerIndex].map(h => String(h || '').trim());
+			const fileData = aoa.slice(headerIndex + 1);
 
 			fileHeader.forEach(h => {
 				if (h) allHeadersSet.add(h);
@@ -5065,6 +5416,16 @@ const dbExtraCardConfig = [
 		loadedFilesId: 'dbReceiveMgmtLoadedFiles',
 		fileCountId: 'dbReceiveMgmtFileCount',
 		label: 'Receive Management'
+	},
+	{
+		key: 'returnAssign',
+		fileInputId: 'dbReturnAssignFileInput',
+		dropzoneId: 'dbReturnAssignDropzone',
+		chooseBtnId: 'dbReturnAssignChooseBtn',
+		addMoreBtnId: 'dbReturnAssignAddMoreBtn',
+		loadedFilesId: 'dbReturnAssignLoadedFiles',
+		fileCountId: 'dbReturnAssignFileCount',
+		label: 'Return Assignment Task'
 	}
 ];
 
@@ -5133,6 +5494,9 @@ async function handleDbExtraFilesAdded(cardKey, fileList) {
 	if (cardKey === 'pickupPerf') {
 		renderPickupPerformanceTable();
 	}
+	if (cardKey === 'receiveMgmt') {
+		rebuildReturnOperatorOptionsFromReceiveMgmt();
+	}
 
 	showToast({
 		type: 'success',
@@ -5193,6 +5557,9 @@ function bindDbExtraUploadCards() {
 					if (key === 'pickupPerf') {
 						renderPickupPerformanceTable();
 					}
+					if (key === 'receiveMgmt') {
+						rebuildReturnOperatorOptionsFromReceiveMgmt();
+					}
 				}
 			});
 		}
@@ -5206,7 +5573,7 @@ function renderPickupPerformanceTable() {
 	const { header, data } = dbExtraMergedData.pickupPerf;
 
 	if (!data || data.length === 0) {
-		tbody.innerHTML = `<tr><td colspan="6" style="padding: 20px 16px; border: 1.5px solid #2D2D2D !important; text-align: center; color: #555;">Silakan upload data Pick Up Performance Report.</td></tr>`;
+		tbody.innerHTML = `<tr><td colspan="6" style="padding: 20px 16px; border: 1.5px solid #2D2D2D; text-align: center; color: #555;">Silakan upload data Pick Up Performance Report.</td></tr>`;
 		return;
 	}
 
@@ -5304,19 +5671,19 @@ function renderPickupPerformanceTable() {
 
 		html += `
 			<tr style="background: ${bg};">
-				<td style="padding: 10px 16px; border: 1.5px solid #2D2D2D !important; text-align: left;">${driverDisplay}</td>
-				<td style="padding: 10px 16px; border: 1.5px solid #2D2D2D !important; text-align: left;">${vehicleType}</td>
-				<td style="padding: 10px 16px; border: 1.5px solid #2D2D2D !important; text-align: left;">${driverGroup}</td>
-				<td style="padding: 10px 16px; border: 1.5px solid #2D2D2D !important; text-align: center;">${parcels}</td>
-				<td style="padding: 10px 16px; border: 1.5px solid #2D2D2D !important; text-align: center;">${sellers}</td>
-				<td style="padding: 10px 16px; font-weight: 800; font-size: 14px; border: 1.5px solid #2D2D2D !important; text-align: center; color: ${rateColor};">${successRateRaw}</td>
+				<td style="padding: 10px 16px; border: 1.5px solid #2D2D2D; text-align: left;">${driverDisplay}</td>
+				<td style="padding: 10px 16px; border: 1.5px solid #2D2D2D; text-align: left;">${vehicleType}</td>
+				<td style="padding: 10px 16px; border: 1.5px solid #2D2D2D; text-align: left;">${driverGroup}</td>
+				<td style="padding: 10px 16px; border: 1.5px solid #2D2D2D; text-align: center;">${parcels}</td>
+				<td style="padding: 10px 16px; border: 1.5px solid #2D2D2D; text-align: center;">${sellers}</td>
+				<td style="padding: 10px 16px; font-weight: 800; font-size: 14px; border: 1.5px solid #2D2D2D; text-align: center; color: ${rateColor};">${successRateRaw}</td>
 			</tr>
 		`;
 		rowCount++;
 	}
 
 	if (rowCount === 0) {
-		html = `<tr><td colspan="6" style="padding: 20px 16px; border: 1.5px solid #2D2D2D !important; text-align: center; color: #555;">Tidak ada data valid dalam file.</td></tr>`;
+		html = `<tr><td colspan="6" style="padding: 20px 16px; border: 1.5px solid #2D2D2D; text-align: center; color: #555;">Tidak ada data valid dalam file.</td></tr>`;
 	}
 
 	tbody.innerHTML = html;
@@ -5643,8 +6010,8 @@ function drawBulkyMeasurementCanvas(sjCanvas, measurementData, slotLabel, hubNam
 	const CANVAS_H = TABLE_BOTTOM + FOOTER_H + 20;
 	const SHADOW_OFFSET = 8; // For outer cartoon shadow
 
-	// Scale up by 5x for super sharp high-resolution output
-	const SCALE = 5;
+	// Scale up by 6x for ultra-sharp high-resolution output (anti-pecah WhatsApp)
+	const SCALE = 6;
 	const canvas = document.createElement('canvas');
 	canvas.width = (CANVAS_W + SHADOW_OFFSET) * SCALE;
 	canvas.height = (CANVAS_H + SHADOW_OFFSET) * SCALE;
@@ -6082,6 +6449,54 @@ function downloadBulkyMeasurementPng() {
 	}, 'image/png');
 }
 
+/**
+ * Download as high-quality JPEG optimized for WhatsApp sharing.
+ * WhatsApp compresses PNG aggressively, so a max-quality JPEG
+ * preserves sharpness much better when sent as a document or photo.
+ */
+function downloadBulkyMeasurementHdJpeg() {
+	if (!bmLastRenderedCanvas) {
+		setError('Generate report terlebih dahulu.');
+		return;
+	}
+
+	const slotNumber = getSlotTripNumber(slotSelect?.value);
+	const datePart = getSelectedReportDateFormatted() || formatDateDDMMYYYY(getTodayInputDate()) || 'report';
+	const fileName = `Bulky_HD_Slot${slotNumber}_${datePart}.jpg`;
+
+	// Create a temp canvas with white background (JPEG doesn't support transparency)
+	const tempCanvas = document.createElement('canvas');
+	tempCanvas.width = bmLastRenderedCanvas.width;
+	tempCanvas.height = bmLastRenderedCanvas.height;
+	const tempCtx = tempCanvas.getContext('2d');
+	tempCtx.fillStyle = '#FFFFFF';
+	tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+	tempCtx.drawImage(bmLastRenderedCanvas, 0, 0);
+
+	tempCanvas.toBlob((blob) => {
+		if (!blob) {
+			setError('Gagal membuat file JPEG HD.');
+			return;
+		}
+
+		const url = URL.createObjectURL(blob);
+		const anchor = document.createElement('a');
+		anchor.href = url;
+		anchor.download = fileName;
+		document.body.appendChild(anchor);
+		anchor.click();
+		anchor.remove();
+		URL.revokeObjectURL(url);
+
+		showToast({
+			type: 'success',
+			title: 'HD Downloaded! 🔥',
+			message: `${fileName} — kirim sebagai DOKUMEN di WhatsApp biar anti pecah!`,
+			duration: 5000
+		});
+	}, 'image/jpeg', 1.0); // Maximum quality JPEG
+}
+
 async function copyBulkyMeasurementImage() {
 	if (!bmLastRenderedCanvas) {
 		setError('Generate report terlebih dahulu.');
@@ -6120,6 +6535,11 @@ if (downloadBulkyMeasurementBtn) {
 	downloadBulkyMeasurementBtn.addEventListener('click', downloadBulkyMeasurementPng);
 }
 
+const downloadBulkyMeasurementHdBtn = document.getElementById('downloadBulkyMeasurementHdBtn');
+if (downloadBulkyMeasurementHdBtn) {
+	downloadBulkyMeasurementHdBtn.addEventListener('click', downloadBulkyMeasurementHdJpeg);
+}
+
 if (copyBulkyMeasurementBtn) {
 	copyBulkyMeasurementBtn.addEventListener('click', copyBulkyMeasurementImage);
 }
@@ -6143,7 +6563,133 @@ if (bulkyMeasurementModal) {
 // Pre Alert Toggle
 // Prealert toggle removed, now handled by folder tabs
 
+// Return Report Export Logic
+function canExportReturnReport() {
+	const hasReceiveData = Boolean(dbExtraMergedData?.receiveMgmt?.data?.length);
+	if (!hasReceiveData) {
+		const message = 'Silakan upload data Receive Management terlebih dahulu.';
+		setWarning(message);
+		showWarningToast(message);
+		return false;
+	}
+	if (!returnSelectedOperators.length) {
+		const message = 'Pilih operator Return terlebih dahulu.';
+		setWarning(message);
+		showWarningToast(message);
+		return false;
+	}
+	return true;
+}
+
+async function generateReturnReportCanvas() {
+	if (!returnTableContainer) return null;
+	try {
+		const originalOverflowX = returnTableContainer.style.overflowX;
+		const originalWidth = returnTableContainer.style.width;
+
+		returnTableContainer.style.overflowX = 'visible';
+		returnTableContainer.style.width = 'max-content';
+
+		const canvas = await html2canvas(returnTableContainer, { scale: 4, backgroundColor: null });
+
+		returnTableContainer.style.overflowX = originalOverflowX;
+		returnTableContainer.style.width = originalWidth;
+
+		return canvas;
+	} catch (err) {
+		console.error('html2canvas error:', err);
+		return null;
+	}
+}
+
+if (returnCopyBtn) {
+	returnCopyBtn.addEventListener('click', async () => {
+		const btn = returnCopyBtn;
+		const originalText = btn.innerHTML;
+		btn.innerHTML = 'COPYING...';
+		btn.disabled = true;
+
+		if (!canExportReturnReport()) {
+			btn.innerHTML = originalText;
+			btn.disabled = false;
+			return;
+		}
+
+		generateReturnPivot();
+		const canvas = await generateReturnReportCanvas();
+		if (!canvas) {
+			setError('Gagal membuat gambar untuk disalin.');
+			btn.innerHTML = originalText;
+			btn.disabled = false;
+			return;
+		}
+
+		try {
+			const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+			await navigator.clipboard.write([
+				new ClipboardItem({ 'image/png': blob })
+			]);
+			showToast({ type: 'success', title: 'Copied!', message: 'Return Report disalin dengan kualitas tajam.', duration: 3000 });
+		} catch (err) {
+			console.error('Copy failed:', err);
+			setError('Gagal menyalin. Pastikan browser mendukung fitur ini.');
+		}
+		btn.innerHTML = originalText;
+		btn.disabled = false;
+	});
+}
+
+if (returnDownloadBtn) {
+	returnDownloadBtn.addEventListener('click', async () => {
+		const btn = returnDownloadBtn;
+		const originalText = btn.innerHTML;
+		btn.innerHTML = 'DOWNLOADING...';
+		btn.disabled = true;
+
+		if (!canExportReturnReport()) {
+			btn.innerHTML = originalText;
+			btn.disabled = false;
+			return;
+		}
+
+		generateReturnPivot();
+		const canvas = await generateReturnReportCanvas();
+		if (!canvas) {
+			setError('Gagal membuat gambar untuk di-download.');
+			btn.innerHTML = originalText;
+			btn.disabled = false;
+			return;
+		}
+
+		canvas.toBlob((blob) => {
+			const url = URL.createObjectURL(blob);
+			const a = document.createElement('a');
+			a.href = url;
+			a.download = `Return_Report_${getTodayInputDate()}.png`;
+			document.body.appendChild(a);
+			a.click();
+			document.body.removeChild(a);
+			URL.revokeObjectURL(url);
+
+			showToast({ type: 'success', title: 'Downloaded', message: 'Return Report berhasil didownload.', duration: 3000 });
+			btn.innerHTML = originalText;
+			btn.disabled = false;
+		}, 'image/png');
+	});
+}
+
 // Pickup Report Export Logic
+function canExportPickupReport() {
+	const hasPickupData = Boolean(dbExtraMergedData?.pickupPerf?.data?.length);
+	if (!hasPickupData) {
+		const message = 'Silakan upload data Pick Up Performance Report terlebih dahulu.';
+		setWarning(message);
+		showWarningToast(message);
+		return false;
+	}
+	return true;
+}
+
 const copyPickupReportBtn = document.getElementById('copyPickupReportBtn');
 const downloadPickupReportBtn = document.getElementById('downloadPickupReportBtn');
 const pickupTableContainer = document.getElementById('pickupTableContainer');
@@ -6177,6 +6723,12 @@ if (copyPickupReportBtn) {
 		const originalText = btn.innerHTML;
 		btn.innerHTML = 'COPYING...';
 		btn.disabled = true;
+
+		if (!canExportPickupReport()) {
+			btn.innerHTML = originalText;
+			btn.disabled = false;
+			return;
+		}
 		
 		const canvas = await generatePickupReportCanvas();
 		if (!canvas) {
@@ -6208,6 +6760,12 @@ if (downloadPickupReportBtn) {
 		btn.innerHTML = 'DOWNLOADING...';
 		btn.disabled = true;
 
+		if (!canExportPickupReport()) {
+			btn.innerHTML = originalText;
+			btn.disabled = false;
+			return;
+		}
+
 		const canvas = await generatePickupReportCanvas();
 		if (!canvas) {
 			setError('Gagal membuat gambar untuk di-download.');
@@ -6231,4 +6789,341 @@ if (downloadPickupReportBtn) {
 			btn.disabled = false;
 		}, 'image/png');
 	});
+}
+
+/* =========================================================================
+   SELLER REPORT RETURN EXCEL GENERATION
+   ========================================================================= */
+
+const DRIVER_NOPOL_MAP = {
+	'[1140631] ODE ENDE': 'B9941PXD',
+	'[785837] KIKI MARDIANSYAH': 'B9288UXG',
+	'[784892] LUTHFI SAFLY PRATAMA': 'B9535UXF'
+};
+
+async function generateSellerReturnExcel() {
+	try {
+		const returnData = dbExtraMergedData?.returnAssign;
+		if (!returnData || !returnData.data || returnData.data.length === 0) {
+			showToast('Silakan upload data Return Assignment Task List terlebih dahulu.', 'error');
+			return;
+		}
+
+		// Find LM Tracking Number column
+		const header = returnData.header || [];
+		const lmTrackingIndex = getReturnHeaderIndexByKeywords(header, ['lm tracking number', 'tracking number', 'resi', 'spx tracking', 'lm tracking', 'tracking no']);
+		
+		if (lmTrackingIndex === -1) {
+			showToast('Kolom LM Tracking Number tidak ditemukan pada data Return Assignment Task List.', 'error');
+			return;
+		}
+
+		// Extract LM Tracking Numbers
+		const trackingNumbers = returnData.data
+			.map(row => normalize(row[lmTrackingIndex]))
+			.filter(val => val !== '');
+
+		if (trackingNumbers.length === 0) {
+			showToast('Tidak ada data LM Tracking Number yang valid.', 'error');
+			return;
+		}
+
+		// Get Driver and Nopol
+		const driverName = driverNameSelect.value;
+		if (!driverName) {
+			showToast('Pilih Nama Driver terlebih dahulu.', 'error');
+			return;
+		}
+		const noPolisi = DRIVER_NOPOL_MAP[driverName] || '';
+
+		// Get Seller Name
+		let formSeller = 'ETHIX,ID'; // Default for Pergudangan
+		if (sellerNameSelect.value === 'Lainnya') {
+			formSeller = normalize(sellerNameCustomInput.value) || 'Unknown Seller';
+		}
+
+		// Get Date
+		let dateStr = reportDate.value;
+		let dateObj = dateStr ? new Date(dateStr) : new Date();
+		
+		// Format to Indonesian date: e.g. "9 Mei 2026"
+		const idMonths = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+		const formattedDate = `${dateObj.getDate()} ${idMonths[dateObj.getMonth()]} ${dateObj.getFullYear()}`;
+
+		const originSource = 'Ciputat 4 First Mile Hub';
+		const totalQty = trackingNumbers.length;
+		const formHub = 'Ciputat 4 First Mile Hub';
+		const reasonReturn = 'Return_FMHub_Returned';
+
+		// We use xlsx-js-style to generate workbook
+		const wb = XLSX.utils.book_new();
+		
+		// Initialize the sheet
+		const wsData = [];
+		// Row 1: empty
+		wsData.push([null, null, null, null, null, null]);
+		// Row 2: empty
+		wsData.push([null, null, null, null, null, null]);
+		// Row 3: Title (B3:F3)
+		wsData.push([null, 'RETURN CIPUTAT 4 FIRST MILE HUB', null, null, null, null]);
+		// Row 4: empty
+		wsData.push([null, null, null, null, null, null]);
+		
+		// Row 5: Driver Name
+		wsData.push([null, 'Driver Name', null, driverName, null, null]);
+		// Row 6: No Polisi
+		wsData.push([null, 'No Polisi', null, noPolisi, null, null]);
+		// Row 7: Origin Source
+		wsData.push([null, 'Origin Source', null, originSource, null, null]);
+		// Row 8: Tanggal
+		wsData.push([null, 'Tanggal', null, formattedDate, null, null]);
+		// Row 9: QTY
+		wsData.push([null, 'QTY', null, totalQty, null, null]);
+		// Row 10: empty
+		wsData.push([null, null, null, null, null, null]);
+		
+		// Row 11: Header Table
+		wsData.push([null, 'NO', 'Order ID', 'Form Seller', 'Form HUB', 'Reason Return']);
+
+		// Row 12+: Data
+		trackingNumbers.forEach((tracking, index) => {
+			wsData.push([null, index + 1, tracking, formSeller, formHub, reasonReturn]);
+		});
+
+		const dataEndRow = wsData.length;
+
+		// Empty row for spacing
+		wsData.push([null, null, null, null, null, null]);
+		wsData.push([null, null, null, null, null, null]);
+
+		// Signature Empty Box Row
+		const signBoxRow = wsData.length;
+		wsData.push([null, '', '', '', '', '']);
+		
+		// Signature Title Row
+		const signTitleRow = wsData.length;
+		wsData.push([null, 'Handover By', '', 'Driver Name', 'PIC', 'Security']);
+
+		const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+		// Merges
+		ws['!merges'] = [
+			{ s: { r: 2, c: 1 }, e: { r: 2, c: 5 } }, // Title (B3:F3)
+			{ s: { r: 4, c: 1 }, e: { r: 4, c: 2 } }, // Driver Name label
+			{ s: { r: 5, c: 1 }, e: { r: 5, c: 2 } }, // No Polisi label
+			{ s: { r: 6, c: 1 }, e: { r: 6, c: 2 } }, // Origin Source label
+			{ s: { r: 7, c: 1 }, e: { r: 7, c: 2 } }, // Tanggal label
+			{ s: { r: 8, c: 1 }, e: { r: 8, c: 2 } }, // QTY label
+			{ s: { r: signBoxRow, c: 1 }, e: { r: signBoxRow, c: 2 } }, // Sign Box 1
+			{ s: { r: signTitleRow, c: 1 }, e: { r: signTitleRow, c: 2 } } // Sign Title 1
+		];
+
+		// Styles
+		const borderAll = {
+			top: { style: 'thin', color: { auto: 1 } },
+			bottom: { style: 'thin', color: { auto: 1 } },
+			left: { style: 'thin', color: { auto: 1 } },
+			right: { style: 'thin', color: { auto: 1 } }
+		};
+
+		// Define cell styles
+		for (let R = 0; R < wsData.length; R++) {
+			for (let C = 1; C <= 5; C++) {
+				const cellRef = XLSX.utils.encode_cell({ c: C, r: R });
+				if (!ws[cellRef]) ws[cellRef] = { v: '', t: 's' };
+				
+				ws[cellRef].s = {
+					font: { name: 'Arial', sz: 11 },
+					alignment: { vertical: 'center' }
+				};
+
+				// Title
+				if (R === 2 && C === 1) {
+					ws[cellRef].s = {
+						font: { name: 'Arial', sz: 16, bold: true },
+						alignment: { horizontal: 'center', vertical: 'center' }
+					};
+				}
+
+				// Metadata labels
+				if (R >= 4 && R <= 8 && C === 1) {
+					ws[cellRef].s.font.bold = true;
+					ws[cellRef].s.alignment.horizontal = 'left';
+					ws[cellRef].s.border = borderAll;
+				}
+				// Metadata values
+				if (R >= 4 && R <= 8 && C === 3) {
+					ws[cellRef].s.alignment.horizontal = 'left';
+					ws[cellRef].s.border = borderAll;
+				}
+
+				// Metadata empty merged spaces need borders
+				if (R >= 4 && R <= 8 && C === 2) {
+					ws[cellRef].s.border = borderAll;
+				}
+
+				// Table Header
+				if (R === 10) {
+					ws[cellRef].s = {
+						font: { name: 'Arial', sz: 11, bold: true, color: { rgb: "FFFFFF" } },
+						fill: { fgColor: { rgb: "002060" } },
+						alignment: { horizontal: 'center', vertical: 'center' },
+						border: borderAll
+					};
+				}
+
+				// Table Data
+				if (R >= 11 && R < dataEndRow) {
+					ws[cellRef].s = {
+						font: { name: 'Arial', sz: 11 },
+						alignment: { horizontal: C === 1 ? 'center' : 'left', vertical: 'center' },
+						border: borderAll
+					};
+				}
+
+				// Signature block Empty Box
+				if (R === signBoxRow && C >= 1 && C <= 5) {
+					ws[cellRef].s = {
+						border: borderAll
+					};
+				}
+
+				// Signature block Titles
+				if (R === signTitleRow && C >= 1 && C <= 5) {
+					ws[cellRef].s = {
+						font: { name: 'Arial', sz: 11, bold: true, color: { rgb: "FFFFFF" } },
+						fill: { fgColor: { rgb: "002060" } },
+						alignment: { horizontal: 'center', vertical: 'center' },
+						border: borderAll
+					};
+				}
+			}
+		}
+
+		// Set Row Heights
+		ws['!rows'] = [];
+		for (let R = 0; R < wsData.length; R++) {
+			if (R === signBoxRow) {
+				ws['!rows'][R] = { hpt: 60 };
+			}
+		}
+
+		// Column Widths
+		ws['!cols'] = [
+			{ wch: 2 },  // A (empty spacing)
+			{ wch: 6 },  // B (NO)
+			{ wch: 25 }, // C (Order ID)
+			{ wch: 25 }, // D (Form Seller)
+			{ wch: 30 }, // E (Form HUB)
+			{ wch: 30 }, // F (Reason Return)
+			{ wch: 2 }   // G (empty spacing, same as A)
+		];
+
+		// Sembunyikan kolom H (index 7) sampai kolom ZZ (index 700) agar terlihat terhapus sampai pojok
+		for (let i = 7; i <= 700; i++) {
+			ws['!cols'][i] = { hidden: true };
+		}
+
+		// Matikan View Gridlines
+		ws['!views'] = [
+			{ showGridLines: false }
+		];
+
+		XLSX.utils.book_append_sheet(wb, ws, "Print Template");
+
+		const fileName = `Return Pergudangan - Ciputat 4 First Mile - ${formattedDate}.xlsx`;
+
+		// 1. Ekspor file Excel dengan styling dari xlsx-js-style ke binary string lalu ke ArrayBuffer
+		const excelBinaryString = XLSX.write(wb, { bookType: 'xlsx', type: 'binary' });
+		const s2ab = (s) => {
+			const buf = new ArrayBuffer(s.length);
+			const view = new Uint8Array(buf);
+			for (let i = 0; i !== s.length; ++i) view[i] = s.charCodeAt(i) & 0xFF;
+			return buf;
+		};
+		const excelArrayBuffer = s2ab(excelBinaryString);
+		
+		// 2. Load buffer tersebut menggunakan ExcelJS
+		const workbook = new ExcelJS.Workbook();
+		await workbook.xlsx.load(excelArrayBuffer);
+		const worksheet = workbook.getWorksheet("Print Template");
+		
+		// 3. Tambahkan logo image ke workbook (menggunakan base64 dari spx_logo.js)
+		const base64Data = SPX_LOGO_BASE64.includes(',') ? SPX_LOGO_BASE64.split(',')[1] : SPX_LOGO_BASE64;
+		const imageId = workbook.addImage({
+			base64: base64Data,
+			extension: 'png',
+		});
+		
+		// 4. Sisipkan logo di sel F2 (0-indexed: col 5, row 1)
+		worksheet.addImage(imageId, {
+			tl: { col: 5, row: 1 },
+			ext: { width: 140, height: 40 } // Sesuaikan ukuran logo (aspect ratio logo SPX)
+		});
+		
+		// 5. Generate final buffer dan trigger download secara manual
+		const finalBuffer = await workbook.xlsx.writeBuffer();
+		const blob = new Blob([finalBuffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+		const url = URL.createObjectURL(blob);
+		const a = document.createElement("a");
+		a.href = url;
+		a.download = fileName;
+		document.body.appendChild(a);
+		a.click();
+		document.body.removeChild(a);
+		URL.revokeObjectURL(url);
+
+		showToast('Excel berhasil didownload!', 'success');
+
+	} catch (e) {
+		console.error("Error generating excel:", e);
+		showToast('Gagal: ' + e.message, 'error');
+	}
+}
+
+/**
+ * Generate Email for Seller Return Report
+ * Opens Gmail compose page directly in browser with pre-filled To, Subject, and Body.
+ * Same approach as prealert email feature.
+ */
+function generateSellerReturnEmail() {
+	try {
+		// Get Date (same logic as Excel generation)
+		let dateStr = reportDate.value;
+		let dateObj = dateStr ? new Date(dateStr) : new Date();
+
+		// Format to Indonesian date: e.g. "9 MEI 2026"
+		const idMonths = ["JANUARI", "FEBRUARI", "MARET", "APRIL", "MEI", "JUNI", "JULI", "AGUSTUS", "SEPTEMBER", "OKTOBER", "NOVEMBER", "DESEMBER"];
+		const formattedDateUpper = `${dateObj.getDate()} ${idMonths[dateObj.getMonth()]} ${dateObj.getFullYear()}`;
+
+		const toEmail = 'admin.tracer@dethix.id';
+		const subject = `RETURN CIPUTAT 4 FIRST MILE ${formattedDateUpper}`;
+
+		const bodyText =
+`Dear Ethix.id,
+
+Kami ingin menginformasikan data return paket yang telah kami lampirkan pada email ini.
+
+Mohon kesediaannya untuk melakukan pengecekan terhadap data tersebut. Apabila terdapat ketidaksesuaian atau informasi tambahan yang diperlukan, silakan dapat dikonfirmasikan kembali kepada kami.
+
+Terima kasih`;
+
+		// Build Gmail Compose URL (same pattern as prealert)
+		const query = new URLSearchParams({
+			view: 'cm',
+			fs: '1',
+			to: toEmail,
+			su: subject,
+			body: bodyText
+		});
+
+		const gmailUrl = `https://mail.google.com/mail/?${query.toString()}`;
+		window.open(gmailUrl, '_blank', 'noopener');
+
+		showToast('Gmail compose dibuka. Jangan lupa lampirkan file Excel!', 'success');
+
+	} catch (e) {
+		console.error("Error generating email:", e);
+		showToast('Gagal membuka email: ' + e.message, 'error');
+	}
 }

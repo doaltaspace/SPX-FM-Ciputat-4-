@@ -720,13 +720,13 @@ body .shortcut-hint {
 .folder-tab-purple.active { background: #B496F9; }
 
 .folder-panel-content {
-	background: #F3E6D0;
-	border: 3px solid #2D2D2D !important;
-	border-radius: 24px;
-	padding: 24px;
+	background: #FFFFFF;
+	border: 3px solid #000000 !important;
+	border-radius: 33px;
+	padding: 32px 24px;
 	position: relative;
 	z-index: 5;
-	box-shadow: none !important;
+	box-shadow: 6px 6px 0px #000000 !important;
 }
 
 @keyframes dropdownSmooth {
@@ -2108,6 +2108,24 @@ body.dark-mode .badge-receive-mgmt {
 	background: #C2185B;
 	color: #F8BBD0;
 	border-color: #E91E63;
+	box-shadow: 2px 2px 0 rgba(0,0,0,0.4);
+}
+
+.badge-return-assign {
+	background: #E1BEE7;
+	color: #4A148C;
+}
+
+body.dark-mode .db-card-return-assign {
+	background: #2A1A3A;
+	border-color: #4A6278;
+	box-shadow: 4px 4px 0 rgba(0,0,0,0.3);
+}
+
+body.dark-mode .badge-return-assign {
+	background: #7B1FA2;
+	color: #E1BEE7;
+	border-color: #AB47BC;
 	box-shadow: 2px 2px 0 rgba(0,0,0,0.4);
 }
 

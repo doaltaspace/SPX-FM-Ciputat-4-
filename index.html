@@ -10,6 +10,8 @@
 	<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&display=swap" rel="stylesheet" />
 	<link rel="stylesheet" href="styles.css?v=8" />
 	<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
+	<script src="spx_logo.js"></script>
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
@@ -455,6 +457,44 @@
 						</div>
 					</div>
 
+					<!-- Return Assignment Task Upload -->
+					<div class="database-card db-card-extra db-card-return-assign">
+						<div class="database-card-header">
+							<span class="database-card-badge badge-extra badge-return-assign">Return Assignment Task</span>
+							<span id="dbReturnAssignFileCount" class="database-file-count">0 file</span>
+						</div>
+						<input id="dbReturnAssignFileInput" type="file" accept=".xlsx,.csv,.zip,.rar" multiple hidden />
+						<div id="dbReturnAssignDropzone" class="database-dropzone" data-state="empty">
+							<div class="db-dropzone-state db-dropzone-empty">
+								<div class="db-dropzone-icon">
+									<svg width="28" height="28" viewBox="0 0 24 24"><rect x="3" y="2" width="18" height="20" rx="3.5" fill="#F3E5F5" stroke="#2D2D2D" stroke-width="2"/><line x1="7" y1="7" x2="17" y2="7" stroke="#AB47BC" stroke-width="2" stroke-linecap="round"/><line x1="7" y1="11" x2="15" y2="11" stroke="#8E24AA" stroke-width="2" stroke-linecap="round"/><line x1="7" y1="15" x2="12" y2="15" stroke="#6A1B9A" stroke-width="2" stroke-linecap="round"/></svg>
+								</div>
+								<div class="db-dropzone-text">
+									<div class="db-drop-title">Upload Excel / CSV</div>
+									<div class="db-drop-subtitle">Drop file atau klik tombol · Maks. 10 file</div>
+								</div>
+								<button id="dbReturnAssignChooseBtn" type="button" class="ghost-btn db-choose-btn">Choose Files</button>
+							</div>
+							<div class="db-dropzone-state db-dropzone-loading">
+								<div class="spinner" style="margin: 0 auto; width: 24px; height: 24px; border-width: 3px;"></div>
+								<div class="db-dropzone-text">
+									<div class="db-drop-title">Memproses File...</div>
+									<div class="db-drop-subtitle">Mengekstrak dan membaca data</div>
+								</div>
+							</div>
+							<div class="db-dropzone-state db-dropzone-loaded">
+								<div class="db-loaded-status-bar db-status-success">
+									<svg width="16" height="16" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#C8E6C9" stroke="#2D2D2D" stroke-width="2"/><polyline points="8 12.5 11 15.5 16.5 9" fill="none" stroke="#2D2D2D" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+									<span>Database Siap</span>
+								</div>
+								<div class="db-loaded-files" id="dbReturnAssignLoadedFiles"></div>
+								<div class="db-loaded-actions">
+									<button id="dbReturnAssignAddMoreBtn" type="button" class="ghost-btn db-action-btn">+ Add More</button>
+								</div>
+							</div>
+						</div>
+					</div>
+
 				</div>
 			</div>
 
@@ -651,9 +691,147 @@
 						</div>
 
 						<!-- RETURN -->
-						<div id="folderContentReturn" style="display: none;">
-							<div class="hourly-maintenance-card" role="status" aria-live="polite" style="margin-top: 0;">
-								<p class="maintenance-notice">Halaman ini sedang dalam proses pengembangan.</p>
+						<div id="folderContentReturn" style="display: none; margin-top: 24px; margin-bottom: 12px;">
+							<!-- Header row: Title on left, Pill on right -->
+							<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+								<!-- Title -->
+								<div style="padding-left: 12px;">
+									<span style="font-family: 'Fredoka', sans-serif; font-style: normal; font-weight: 700; font-size: 16px; line-height: 18px; color: #000000; text-transform: uppercase;">DAILY REPORT RETURN</span>
+								</div>
+								
+								<!-- Operator Selector Pill -->
+								<div style="position: relative; z-index: 20;">
+									<div id="returnOperatorCombobox" class="operator-combobox token-input-wrapper" style="box-sizing: border-box; background: #FFFFFF; border: 2.5px solid #000000; box-shadow: 2px 2px 0px 0px #000000; border-radius: 33px; height: 30px; padding: 0 16px; min-width: 180px; display: flex; align-items: center; justify-content: center; cursor: text;">
+										<div id="returnSelectedOperatorTags" class="token-tags" style="display:none;"></div>
+										<input id="returnOperatorInput" type="text" placeholder="Nama Operator Return" autocomplete="off" class="token-input" style="background: transparent; border: none; font-family: 'Fredoka', sans-serif; font-style: normal; font-weight: 700; font-size: 12px; color: #000000; width: 100%; outline: none; text-align: center;" />
+										<div id="returnOperatorDropdown" class="operator-dropdown" style="top: 100%; margin-top: 8px;"></div>
+									</div>
+									<div id="returnOperatorDetectedCount" class="helper-text" style="display: none;"></div>
+								</div>
+							</div>
+
+							<!-- Inner Container -->
+							<div style="position: relative; box-sizing: border-box; background: #FFFFFF; border: 2.5px solid #000000; box-shadow: 4px 4px 0px 0px #000000; border-radius: 33px; padding: 24px 16px 16px 16px;">
+								
+								<style>
+									.return-action-btn {
+										box-sizing: border-box;
+										border: 2.5px solid #000000;
+										box-shadow: 2px 2px 0px 0px #000000;
+										border-radius: 33px;
+										height: 28px;
+										padding: 0 16px;
+										font-family: 'Fredoka', sans-serif;
+										font-weight: 700;
+										font-size: 11px;
+										color: #000000;
+										cursor: pointer;
+										display: flex;
+										align-items: center;
+										justify-content: center;
+										transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.15s ease, filter 0.15s ease;
+									}
+									.return-action-btn:hover {
+										transform: translateY(-2px);
+										box-shadow: 4px 4px 0px 0px #000000;
+										filter: brightness(1.05);
+									}
+									.return-action-btn:active {
+										transform: translateY(1px);
+										box-shadow: 1px 1px 0px 0px #000000;
+										filter: brightness(0.95);
+									}
+									#returnCopyBtn { background: #FFD966; }
+									#returnDownloadBtn { background: #98FF75; }
+
+									.perfect-table { border-collapse: separate !important; border-spacing: 0; }
+									.perfect-table th, .perfect-table td {
+										border-top: none !important;
+										border-left: none !important;
+										border-right: 1.5px solid #2D2D2D;
+										border-bottom: 1.5px solid #2D2D2D;
+									}
+									.perfect-table th:last-child, .perfect-table td:last-child {
+										border-right: none !important;
+									}
+									.perfect-table tbody tr:last-child td {
+										border-bottom: none !important;
+									}
+								</style>
+
+								<!-- Action Buttons overlapping inner container top-right -->
+								<div style="position: absolute; top: -15px; right: 24px; display: flex; gap: 8px; z-index: 10;">
+									<button id="returnCopyBtn" type="button" class="return-action-btn">COPY</button>
+									<button id="returnDownloadBtn" type="button" class="return-action-btn">DOWNLOAD</button>
+								</div>
+
+								<!-- Pivot Table -->
+								<div id="returnTableContainer" class="hide-scrollbar" style="border: 2px solid #2D2D2D; border-radius: 12px; box-shadow: 4px 4px 0 #2D2D2D; margin-top: 12px; overflow: hidden; font-family: 'Fredoka', sans-serif; min-height: 100px;">
+									<table class="perfect-table" style="width: 100%; font-size: 13px; text-align: center; white-space: nowrap;">
+										<thead>
+											<tr style="background: #FCD15A; color: #2D2D2D; text-transform: uppercase;">
+												<th style="padding: 10px 16px; font-weight: 800; text-align: left;">Row Labels</th>
+												<th style="padding: 10px 16px; font-weight: 800; text-align: center;">Count of SPX Tracking Number</th>
+											</tr>
+										</thead>
+										<tbody id="returnTableBody" style="color: #2D2D2D; font-weight: 600;">
+											<tr style="background: #FFFFFF;">
+												<td colspan="2" style="padding: 20px 16px; text-align: center; color: #555; font-weight: 700;">Silakan upload data Receive Management dan pilih Operator.</td>
+											</tr>
+										</tbody>
+									</table>
+								</div>
+							</div>
+
+							<!-- SELLER REPORT RETURN SECTION -->
+							<div style="margin-top: 64px; position: relative; width: 100%; padding-top: 36px; padding-bottom: 24px;">
+								
+								<!-- Title -->
+								<div style="position: absolute; top: 0; right: 24px; font-family: 'Fredoka One', 'Fredoka', sans-serif; font-size: 20px; color: #000000; text-transform: uppercase;">
+									SELLER REPORT RETURN
+								</div>
+
+								<!-- Main Container -->
+								<div id="sellerReturnContainer" style="position: relative; box-sizing: border-box; width: 100%; height: 260px; background: #FFFFFF; border: 3px solid #2D2D2D; box-shadow: 6px 6px 0px 0px #2D2D2D; border-radius: 36px; z-index: 1;">
+									
+									<!-- Top Bar (Dropdowns & Action Buttons) overlapping top border -->
+									<div style="position: absolute; top: -18px; left: 0; width: 100%; display: flex; justify-content: space-between; padding: 0 32px; box-sizing: border-box; z-index: 10;">
+										
+										<!-- Left: Dropdowns -->
+										<div style="display: flex; gap: 12px;">
+											<!-- Nama Seller -->
+											<div style="position: relative; width: 220px;">
+												<select id="sellerNameSelect" style="box-sizing: border-box; width: 100%; height: 36px; background: #FFFFFF; border: 2.5px solid #2D2D2D; box-shadow: 3px 3px 0px #2D2D2D; border-radius: 36px; padding: 0 16px; font-family: 'Fredoka One', 'Fredoka', sans-serif; font-weight: 400; font-size: 14px; cursor: pointer; outline: none; appearance: none;">
+													<option value="Pergudangan">Pergudangan</option>
+													<option value="Lainnya">Lainnya...</option>
+												</select>
+												<input id="sellerNameCustomInput" type="text" placeholder="Ketik Nama Seller" style="display:none; box-sizing: border-box; width: 100%; height: 36px; background: #FFFFFF; border: 2.5px solid #2D2D2D; box-shadow: 3px 3px 0px #2D2D2D; border-radius: 36px; padding: 0 16px; font-family: 'Fredoka One', 'Fredoka', sans-serif; font-weight: 400; font-size: 14px; margin-top: 12px; outline: none; position: absolute; top: 100%; left: 0; z-index: 15;" />
+											</div>
+
+											<!-- Nama Driver -->
+											<div style="position: relative; width: 220px;">
+												<select id="driverNameSelect" style="box-sizing: border-box; width: 100%; height: 36px; background: #FFFFFF; border: 2.5px solid #2D2D2D; box-shadow: 3px 3px 0px #2D2D2D; border-radius: 36px; padding: 0 16px; font-family: 'Fredoka One', 'Fredoka', sans-serif; font-weight: 400; font-size: 14px; cursor: pointer; outline: none; appearance: none;">
+													<option value="">Nama Driver</option>
+													<option value="[1140631] ODE ENDE">[1140631] ODE ENDE</option>
+													<option value="[785837] KIKI MARDIANSYAH">[785837] KIKI MARDIANSYAH</option>
+													<option value="[784892] LUTHFI SAFLY PRATAMA">[784892] LUTHFI SAFLY PRATAMA</option>
+												</select>
+											</div>
+										</div>
+
+										<!-- Right: Action Buttons -->
+										<div style="display: flex; gap: 12px;">
+											<button id="sellerReturnViewBtn" type="button" style="box-sizing: border-box; padding: 0 20px; height: 36px; background: #D4E6FF; border: 2.5px solid #2D2D2D; box-shadow: 3px 3px 0px #2D2D2D; border-radius: 36px; font-family: 'Fredoka One', 'Fredoka', sans-serif; font-size: 14px; color: #000000; cursor: pointer;">View</button>
+											<button id="sellerReturnCopyBtn" type="button" style="box-sizing: border-box; padding: 0 20px; height: 36px; background: #FFC93C; border: 2.5px solid #2D2D2D; box-shadow: 3px 3px 0px #2D2D2D; border-radius: 36px; font-family: 'Fredoka One', 'Fredoka', sans-serif; font-size: 14px; color: #000000; cursor: pointer;">Copy</button>
+											<button id="sellerReturnDownloadBtn" type="button" style="box-sizing: border-box; padding: 0 20px; height: 36px; background: #98FF75; border: 2.5px solid #2D2D2D; box-shadow: 3px 3px 0px #2D2D2D; border-radius: 36px; font-family: 'Fredoka One', 'Fredoka', sans-serif; font-size: 14px; color: #000000; cursor: pointer;">Download</button>
+										</div>
+									</div>
+
+									<!-- Generate Email Button overlapping bottom-right border -->
+									<div style="position: absolute; bottom: -18px; right: 32px; z-index: 10;">
+										<button id="sellerReturnGenerateEmailBtn" type="button" style="box-sizing: border-box; padding: 0 32px; height: 36px; background: #FF6A00; border: 2.5px solid #2D2D2D; box-shadow: 3px 3px 0px #2D2D2D; border-radius: 36px; font-family: 'Fredoka One', 'Fredoka', sans-serif; font-size: 15px; color: #000000; cursor: pointer; filter: drop-shadow(0px 4px 4px rgba(0, 0, 0, 0.25));">Generate Email</button>
+									</div>
+								</div>
 							</div>
 						</div>
 
@@ -669,21 +847,21 @@
 									DOWNLOAD REPORT
 								</button>
 							</div>
-							<div id="pickupTableContainer" class="hide-scrollbar" style="border: 2px solid #2D2D2D; border-radius: 12px; box-shadow: 4px 4px 0 #2D2D2D; margin-top: 12px; overflow-x: auto; font-family: 'Fredoka', sans-serif;">
-								<table style="width: 100%; border-collapse: collapse; font-size: 13px; text-align: center; white-space: nowrap;">
+							<div id="pickupTableContainer" class="hide-scrollbar" style="border: 2px solid #2D2D2D; border-radius: 12px; box-shadow: 4px 4px 0 #2D2D2D; margin-top: 12px; overflow: hidden; font-family: 'Fredoka', sans-serif;">
+								<table class="perfect-table" style="width: 100%; font-size: 13px; text-align: center; white-space: nowrap;">
 									<thead>
 										<tr style="background: #FCD15A; color: #2D2D2D; text-transform: uppercase;">
-											<th style="padding: 10px 16px; font-weight: 800; border: 1.5px solid #2D2D2D !important; text-align: center;">Driver</th>
-											<th style="padding: 10px 16px; font-weight: 800; border: 1.5px solid #2D2D2D !important; text-align: center;">Vehicle Type</th>
-											<th style="padding: 10px 16px; font-weight: 800; border: 1.5px solid #2D2D2D !important; text-align: center;">Driver Group</th>
-											<th style="padding: 10px 16px; font-weight: 800; border: 1.5px solid #2D2D2D !important; text-align: center;">Number of parcels picked up</th>
-											<th style="padding: 10px 16px; font-weight: 800; border: 1.5px solid #2D2D2D !important; text-align: center;">Number of sellers picked up</th>
-											<th style="padding: 10px 16px; font-weight: 800; border: 1.5px solid #2D2D2D !important; text-align: center;">Pickup success rate(%)</th>
+											<th style="padding: 10px 16px; font-weight: 800; text-align: center;">Driver</th>
+											<th style="padding: 10px 16px; font-weight: 800; text-align: center;">Vehicle Type</th>
+											<th style="padding: 10px 16px; font-weight: 800; text-align: center;">Driver Group</th>
+											<th style="padding: 10px 16px; font-weight: 800; text-align: center;">Number of parcels picked up</th>
+											<th style="padding: 10px 16px; font-weight: 800; text-align: center;">Number of sellers picked up</th>
+											<th style="padding: 10px 16px; font-weight: 800; text-align: center;">Pickup success rate(%)</th>
 										</tr>
 									</thead>
 									<tbody id="pickupTableBody" style="color: #2D2D2D; font-weight: 600;">
 										<tr style="background: #FFFFFF;">
-											<td colspan="6" style="padding: 20px 16px; border: 1.5px solid #2D2D2D !important; text-align: center; color: #555;">Silakan upload data Pick Up Performance Report.</td>
+											<td colspan="6" style="padding: 20px 16px; text-align: center; color: #555;">Silakan upload data Pick Up Performance Report.</td>
 										</tr>
 									</tbody>
 								</table>
@@ -865,6 +1043,10 @@
 					<button id="copyBulkyMeasurementBtn" type="button" class="bm-download-btn bm-copy-btn">
 						<svg width="15" height="15" viewBox="0 0 24 24" fill="none"><rect x="9" y="9" width="13" height="13" rx="2" stroke="currentColor" stroke-width="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
 						Copy
+					</button>
+					<button id="downloadBulkyMeasurementHdBtn" type="button" class="bm-download-btn bm-hd-btn" title="Download HD JPEG untuk WhatsApp (anti pecah!)">
+						<svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><polyline points="7 10 12 15 17 10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="12" y1="15" x2="12" y2="3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+						HD WhatsApp
 					</button>
 					<button id="downloadBulkyMeasurementBtn" type="button" class="bm-download-btn">
 						<svg width="15" height="15" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><polyline points="7 10 12 15 17 10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="12" y1="15" x2="12" y2="3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
