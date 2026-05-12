@@ -6582,6 +6582,8 @@ function canExportReturnReport() {
 
 async function generateReturnReportCanvas() {
 	if (!returnTableContainer) return null;
+	const returnTopBar = document.getElementById('returnTopBar');
+	const captureTarget = document.getElementById('returnCaptureWrapper') || returnTableContainer;
 	try {
 		const originalOverflowX = returnTableContainer.style.overflowX;
 		const originalWidth = returnTableContainer.style.width;
@@ -6589,7 +6591,11 @@ async function generateReturnReportCanvas() {
 		returnTableContainer.style.overflowX = 'visible';
 		returnTableContainer.style.width = 'max-content';
 
-		const canvas = await html2canvas(returnTableContainer, { scale: 4, backgroundColor: null });
+		if (returnTopBar) returnTopBar.style.display = 'none';
+
+		const canvas = await html2canvas(captureTarget, { scale: 4, backgroundColor: null });
+
+		if (returnTopBar) returnTopBar.style.display = 'flex';
 
 		returnTableContainer.style.overflowX = originalOverflowX;
 		returnTableContainer.style.width = originalWidth;
@@ -6597,6 +6603,7 @@ async function generateReturnReportCanvas() {
 		return canvas;
 	} catch (err) {
 		console.error('html2canvas error:', err);
+		if (returnTopBar) returnTopBar.style.display = 'flex';
 		return null;
 	}
 }
