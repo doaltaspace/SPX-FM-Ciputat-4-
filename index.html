@@ -698,13 +698,12 @@
 							</div>
 
 							<!-- Top Bar (Dropdown & Action Buttons) -->
-							<div id="returnTopBar" style="width: 100%; display: flex; justify-content: space-between; align-items: center; margin-bottom: 0; padding: 0 4px; box-sizing: border-box; position: relative; z-index: 10;">
+							<div id="returnTopBar" style="width: 100%; display: flex; justify-content: space-between; align-items: center; margin-top: 4px; margin-bottom: 6px; padding: 0 4px; box-sizing: border-box; position: relative; z-index: 10;">
 								<!-- Left: Dropdown -->
-								<div style="position: relative; width: 220px;">
-									<div id="returnOperatorCombobox" class="operator-combobox token-input-wrapper" style="box-sizing: border-box; background: #FFFFFF; border: 2.5px solid #2D2D2D; box-shadow: 3px 3px 0px 0px #2D2D2D; border-radius: 36px; height: 32px; padding: 0 16px; width: 100%; display: flex; align-items: center; justify-content: center; cursor: text;">
-										<div id="returnSelectedOperatorTags" class="token-tags" style="display:none;"></div>
-										<input id="returnOperatorInput" type="text" placeholder="Nama Operator Return" autocomplete="off" class="token-input" style="background: transparent; border: none; font-family: 'Fredoka One', 'Fredoka', sans-serif; font-weight: 700; font-size: 14px; color: #000000; width: 100%; outline: none; text-align: center;" />
-										<div id="returnOperatorDropdown" class="operator-dropdown" style="top: 100%; margin-top: 8px;"></div>
+								<div style="position: relative; width: auto;">
+									<div id="returnOperatorCombobox" class="operator-combobox token-input-wrapper" style="box-sizing: border-box; background: #FFFFFF; border: 2.5px solid #2D2D2D; box-shadow: 3px 3px 0px 0px #2D2D2D; border-radius: 36px; min-height: 32px; padding: 0 20px; width: auto; min-width: 180px; display: inline-flex; align-items: center; justify-content: flex-start; cursor: text;">
+										<input id="returnOperatorInput" type="text" placeholder="PILIH OPERATOR" autocomplete="off" class="token-input" style="background: transparent; border: none; font-family: 'Fredoka One', 'Fredoka', sans-serif; font-weight: 700; font-size: 14px; color: #000000; width: 100%; outline: none; text-align: left; text-transform: uppercase; padding: 0; margin: 0;" />
+										<div id="returnOperatorDropdown" class="operator-dropdown" style="top: 100%; margin-top: 8px; right: auto; min-width: 100%; width: max-content; white-space: nowrap;"></div>
 									</div>
 									<div id="returnOperatorDetectedCount" class="helper-text" style="display: none;"></div>
 								</div>
@@ -750,6 +749,10 @@
 									}
 									#returnCopyBtn { background: #FFD966; }
 									#returnDownloadBtn { background: #98FF75; }
+									#returnOperatorInput::placeholder {
+										color: #000000;
+										opacity: 1;
+									}
 
 									.perfect-table { border-collapse: separate !important; border-spacing: 0; }
 									.perfect-table th, .perfect-table td {
@@ -772,13 +775,13 @@
 									<table class="perfect-table" style="width: 100%; font-size: 13px; text-align: center; white-space: nowrap;">
 										<thead>
 											<tr style="background: #FCD15A; color: #2D2D2D; text-transform: uppercase;">
-												<th style="padding: 10px 16px; font-weight: 800; text-align: left;">Row Labels</th>
-												<th style="padding: 10px 16px; font-weight: 800; text-align: center;">Count of SPX Tracking Number</th>
+												<th style="padding: 10px 16px; font-weight: 800; text-align: center; border: 1.5px solid #2D2D2D;">Row Labels</th>
+												<th style="padding: 10px 16px; font-weight: 800; text-align: center; border: 1.5px solid #2D2D2D;">Count of SPX Tracking Number</th>
 											</tr>
 										</thead>
 										<tbody id="returnTableBody" style="color: #2D2D2D; font-weight: 600;">
 											<tr style="background: #FFFFFF;">
-												<td colspan="2" style="padding: 20px 16px; text-align: center; color: #555; font-weight: 700;">Silakan upload data Receive Management dan pilih Operator.</td>
+												<td colspan="2" style="padding: 20px 16px; text-align: center; color: #555; font-weight: 700;">Silakan upload data Receive Management.</td>
 											</tr>
 										</tbody>
 									</table>

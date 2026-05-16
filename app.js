@@ -3213,51 +3213,30 @@ function resetReturnOperatorState() {
 	if (returnOperatorInput) {
 		returnOperatorInput.value = '';
 	}
+	autoResizeReturnOperatorInput();
 	updateReturnOperatorDetectedCounter();
-	renderReturnOperatorTags();
 	renderReturnOperatorDropdown();
 }
 
-function renderReturnOperatorTags() {
-	if (!returnSelectedOperatorTags) {
-		return;
-	}
-	returnSelectedOperatorTags.innerHTML = '';
 
-	returnSelectedOperators.forEach((operator) => {
-		const tag = document.createElement('span');
-		tag.className = 'selected-tag';
-		tag.textContent = operator;
-
-		const removeBtn = document.createElement('button');
-		removeBtn.type = 'button';
-		removeBtn.className = 'tag-remove';
-		removeBtn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11" fill="#FF4D4D" stroke="#2D2D2D" stroke-width="2"/><path d="M15 9L9 15M9 9l6 6" stroke="#2D2D2D" stroke-width="2.5" stroke-linecap="round"/></svg>';
-		removeBtn.addEventListener('click', () => {
-			returnSelectedOperators = returnSelectedOperators.filter((item) => item !== operator);
-			renderReturnOperatorTags();
-			renderReturnOperatorDropdown();
-			generateReturnPivot();
-		});
-
-		tag.appendChild(removeBtn);
-		returnSelectedOperatorTags.appendChild(tag);
-	});
-}
 
 function renderReturnOperatorDropdown() {
 	if (!returnOperatorInput || !returnOperatorDropdown) {
 		return;
 	}
-	const keyword = normalize(returnOperatorInput.value).toLowerCase();
-	const shouldOpen = document.activeElement === returnOperatorInput || Boolean(keyword);
-	if (!shouldOpen) {
+	let keyword = normalize(returnOperatorInput.value).toLowerCase();
+	const isFocused = document.activeElement === returnOperatorInput;
+	if (!isFocused) {
 		returnOperatorDropdown.classList.remove('open');
 		return;
 	}
 
+	if (returnSelectedOperators.length > 0 && normalize(returnSelectedOperators[0]).toLowerCase() === keyword) {
+		keyword = '';
+	}
+
 	const filtered = returnAvailableOperators.filter((operator) => {
-		return operator.toLowerCase().includes(keyword) && !returnSelectedOperators.includes(operator);
+		return operator.toLowerCase().includes(keyword);
 	});
 
 	returnOperatorDropdown.innerHTML = '';
@@ -3280,12 +3259,12 @@ function renderReturnOperatorDropdown() {
 		option.className = 'operator-option';
 		option.textContent = operator;
 		option.addEventListener('click', () => {
-			returnSelectedOperators.push(operator);
-			returnOperatorInput.value = '';
-			renderReturnOperatorTags();
-			renderReturnOperatorDropdown();
+			returnSelectedOperators = [operator];
+			returnOperatorInput.value = operator;
+			autoResizeReturnOperatorInput();
+			returnOperatorDropdown.classList.remove('open');
 			generateReturnPivot();
-			returnOperatorInput.focus();
+			returnOperatorInput.blur();
 		});
 		returnOperatorDropdown.appendChild(option);
 	});
@@ -3295,6 +3274,21 @@ function renderReturnOperatorDropdown() {
 
 function closeReturnOperatorDropdown() {
 	returnOperatorDropdown?.classList.remove('open');
+}
+
+function autoResizeReturnOperatorInput() {
+	if (!returnOperatorInput) return;
+	const text = returnOperatorInput.value || returnOperatorInput.placeholder || '';
+	const span = document.createElement('span');
+	span.style.cssText = 'position:absolute;visibility:hidden;white-space:nowrap;font-family:"Fredoka One","Fredoka",sans-serif;font-weight:700;font-size:14px;text-transform:uppercase;letter-spacing:normal;';
+	span.textContent = text;
+	document.body.appendChild(span);
+	const textWidth = span.offsetWidth;
+	document.body.removeChild(span);
+	const minWidth = 140;
+	const newWidth = Math.max(minWidth, textWidth + 10);
+	returnOperatorInput.style.width = newWidth + 'px';
+	returnOperatorInput.style.minWidth = newWidth + 'px';
 }
 
 function setReturnTableMessage(message) {
@@ -3321,16 +3315,16 @@ function renderReturnPivotRows(rows, grandTotal) {
 		const safeCount = Number.isFinite(row.count) ? row.count : 0;
 		html += `
 			<tr style="background: ${bg};">
-				<td style="padding: 10px 16px; border: 1.5px solid #2D2D2D; text-align: left; font-weight: 700;">${escapeHtml(row.status)}</td>
-				<td style="padding: 10px 16px; border: 1.5px solid #2D2D2D; text-align: right; font-weight: 800;">${safeCount.toLocaleString('id-ID')}</td>
+				<td style="padding: 10px 16px; border: 1.5px solid #2D2D2D; text-align: center; font-weight: 700;">${escapeHtml(row.status)}</td>
+				<td style="padding: 10px 16px; border: 1.5px solid #2D2D2D; text-align: center; font-weight: 800;">${safeCount.toLocaleString('id-ID')}</td>
 			</tr>
 		`;
 	});
 	const grandBg = '#B3E5FC';
 	html += `
 		<tr style="background: ${grandBg};">
-			<td style="padding: 10px 16px; border: 1.5px solid #2D2D2D; text-align: left; font-weight: 800;">Grand Total</td>
-			<td style="padding: 10px 16px; border: 1.5px solid #2D2D2D; text-align: right; font-weight: 800;">${grandTotal.toLocaleString('id-ID')}</td>
+			<td style="padding: 10px 16px; border: 1.5px solid #2D2D2D; text-align: center; font-weight: 800;">Grand Total</td>
+			<td style="padding: 10px 16px; border: 1.5px solid #2D2D2D; text-align: center; font-weight: 800;">${grandTotal.toLocaleString('id-ID')}</td>
 		</tr>
 	`;
 	returnTableBody.innerHTML = html;
@@ -3339,7 +3333,7 @@ function renderReturnPivotRows(rows, grandTotal) {
 function generateReturnPivot() {
 	const receiveData = dbExtraMergedData?.receiveMgmt;
 	if (!receiveData || !receiveData.data || receiveData.data.length === 0) {
-		setReturnTableMessage('Silakan upload data Receive Management dan pilih Operator.');
+		setReturnTableMessage('Silakan upload data Receive Management.');
 		return;
 	}
 
@@ -3366,7 +3360,8 @@ function generateReturnPivot() {
 		return status.startsWith(statusPrefix);
 	});
 
-	if (returnSelectedOperators.length) {
+	// Jika operator dipilih, filter. Jika tidak dipilih = ALL operator.
+	if (returnSelectedOperators.length > 0) {
 		const selectedSet = new Set(returnSelectedOperators.map(op => normalize(op)));
 		filtered = filtered.filter(row => selectedSet.has(normalize(row[operatorIndex])));
 	}
@@ -3406,7 +3401,7 @@ function rebuildReturnOperatorOptionsFromReceiveMgmt() {
 	const receiveData = dbExtraMergedData?.receiveMgmt;
 	if (!receiveData || !receiveData.data || receiveData.data.length === 0) {
 		resetReturnOperatorState();
-		setReturnTableMessage('Silakan upload data Receive Management dan pilih Operator.');
+		setReturnTableMessage('Silakan upload data Receive Management.');
 		return;
 	}
 
@@ -3424,7 +3419,7 @@ function rebuildReturnOperatorOptionsFromReceiveMgmt() {
 		returnAvailableOperators = [];
 		returnSelectedOperators = [];
 		updateReturnOperatorDetectedCounter();
-		renderReturnOperatorTags();
+		renderReturnOperatorDropdown();
 		renderReturnOperatorDropdown();
 		setReturnTableMessage('Kolom Operator tidak ditemukan di Receive Management.');
 		return;
@@ -3445,7 +3440,7 @@ function rebuildReturnOperatorOptionsFromReceiveMgmt() {
 	returnAvailableOperators = operators;
 	returnSelectedOperators = returnSelectedOperators.filter((operator) => returnAvailableOperators.includes(operator));
 	updateReturnOperatorDetectedCounter();
-	renderReturnOperatorTags();
+	renderReturnOperatorDropdown();
 	renderReturnOperatorDropdown();
 	
 	generateReturnPivot();
@@ -4305,7 +4300,7 @@ function init() {
 	updateTripDetectedCounter();
 	setTripDropdownOptions([]);
 	renderSelectedOperatorTags();
-	renderReturnOperatorTags();
+	renderReturnOperatorDropdown();
 	updateReturnOperatorDetectedCounter();
 	refreshPreview();
 	updateReportSummary();
@@ -6583,22 +6578,39 @@ function canExportReturnReport() {
 async function generateReturnReportCanvas() {
 	if (!returnTableContainer) return null;
 	const returnTopBar = document.getElementById('returnTopBar');
-	const captureTarget = document.getElementById('returnCaptureWrapper') || returnTableContainer;
 	try {
-		const originalOverflowX = returnTableContainer.style.overflowX;
-		const originalWidth = returnTableContainer.style.width;
+		// Save originals
+		const saved = {
+			overflowX: returnTableContainer.style.overflowX,
+			overflow: returnTableContainer.style.overflow,
+			width: returnTableContainer.style.width,
+			borderRadius: returnTableContainer.style.borderRadius,
+			boxShadow: returnTableContainer.style.boxShadow,
+			border: returnTableContainer.style.border,
+		};
 
+		// Strip ALL ornamental styles for a perfectly tight capture
 		returnTableContainer.style.overflowX = 'visible';
+		returnTableContainer.style.overflow = 'visible';
 		returnTableContainer.style.width = 'max-content';
+		returnTableContainer.style.borderRadius = '0';
+		returnTableContainer.style.boxShadow = 'none';
+		returnTableContainer.style.border = 'none';
 
 		if (returnTopBar) returnTopBar.style.display = 'none';
 
-		const canvas = await html2canvas(captureTarget, { scale: 4, backgroundColor: null });
+		// Capture directly from the table container (not the wrapper)
+		const canvas = await html2canvas(returnTableContainer, { scale: 4, backgroundColor: null });
 
 		if (returnTopBar) returnTopBar.style.display = 'flex';
 
-		returnTableContainer.style.overflowX = originalOverflowX;
-		returnTableContainer.style.width = originalWidth;
+		// Restore originals
+		returnTableContainer.style.overflowX = saved.overflowX;
+		returnTableContainer.style.overflow = saved.overflow;
+		returnTableContainer.style.width = saved.width;
+		returnTableContainer.style.borderRadius = saved.borderRadius;
+		returnTableContainer.style.boxShadow = saved.boxShadow;
+		returnTableContainer.style.border = saved.border;
 
 		return canvas;
 	} catch (err) {
